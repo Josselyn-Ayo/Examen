@@ -41,7 +41,7 @@ export class SupabaseAuthRepository implements IAuthRepository {
   }
 
   async loginWithGoogle(): Promise<User> {
-    const redirectTo = Linking.createURL("/");
+    const redirectTo = Linking.createURL("");
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -54,26 +54,21 @@ export class SupabaseAuthRepository implements IAuthRepository {
     if (!data.url) throw new Error("No se pudo iniciar Google Login");
 
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    if (result.type !== "success" || !result.url) {
+    if (result.type === "cancel") {
       throw new Error("El inicio de sesión con Google fue cancelado");
     }
-
-    const parsed = Linking.parse(result.url);
-    const code = parsed.queryParams?.code;
-    if (typeof code !== "string" || !code) {
-      throw new Error("No se recibió el código de autorización de Google");
+    if (result.type !== "success" || !result.url) {
+      throw new Error("No se recibió respuesta de Google");
     }
 
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-    if (exchangeError) throw exchangeError;
+    const { data: { session }, error: sessionError } = await supabase.auth.exchangeCodeForSession(
+      new URL(result.url).searchParams.get("code") ?? ""
+    );
+    if (sessionError) throw sessionError;
+    if (!session?.user) throw new Error("No se pudo obtener la sesión de Google");
 
-    const { data: currentUserResult } = await supabase.auth.getUser();
-    const currentUser = currentUserResult.user;
-    if (!currentUser) throw new Error("No se pudo recuperar el usuario de Google");
-
-    await this.ensureProfile(currentUser);
-    const user = await this.getCurrentUser();
-    if (!user) throw new Error("No se pudo recuperar el usuario de Google");
+    await this.ensureProfile(session.user);
+    const user = await this.mapUser(session.user);
     return user;
   }
 

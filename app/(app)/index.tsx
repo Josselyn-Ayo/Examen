@@ -8,7 +8,6 @@ import {
     Animated,
     FlatList,
     Image,
-    Modal,
     StyleSheet,
     Text,
     TextInput,
@@ -19,31 +18,20 @@ import { BottomNav } from "../../components/BottomNav";
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function RoomsScreen() {
+export default function ChatListScreen() {
   const user = useAuthStore((s) => s.user);
-  const { rooms, isLoading, createRoom, isCreating, createError, canCreateRooms } = useRooms();
+  const { rooms, isLoading } = useRooms();
   const router = useRouter();
-  const [modalVisible, setModalVisible] = useState(false);
-  const [roomName, setRoomName] = useState("");
   const [search, setSearch] = useState("");
+  const isRefugio = user?.role === "refugio";
 
   const filteredRooms = useMemo(
     () =>
       rooms.filter((room) =>
-        room.name.toLowerCase().includes(search.trim().toLowerCase()),
+        (room.petName ?? room.name).toLowerCase().includes(search.trim().toLowerCase()),
       ),
     [rooms, search],
   );
-
-  const handleCreate = () => {
-    if (!roomName.trim() || isCreating) return;
-    createRoom(roomName.trim(), {
-      onSuccess: () => {
-        setRoomName("");
-        setModalVisible(false);
-      },
-    });
-  };
 
   const buildAvatarUrl = (seed: string, style: "thumbs" | "bottts" = "thumbs") =>
     `https://api.dicebear.com/9.x/${style}/png?seed=${encodeURIComponent(seed)}`;
@@ -51,12 +39,6 @@ export default function RoomsScreen() {
   const profileSource = user?.avatarUrl
     ? { uri: user.avatarUrl }
     : { uri: buildAvatarUrl(user?.username ?? user?.email ?? "user", "thumbs") };
-
-  const hashCode = (s: string) => {
-    let h = 0;
-    for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i) | 0;
-    return h;
-  };
 
   function ChatListItem({ item }: { item: Room }) {
     const scale = useRef(new Animated.Value(1)).current;
@@ -76,7 +58,14 @@ export default function RoomsScreen() {
     const onPressIn = () => Animated.spring(scale, { toValue: 0.985, useNativeDriver: true }).start();
     const onPressOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
 
-    const avatarSource = { uri: buildAvatarUrl(`${item.id}-${item.name}`, "bottts") };
+    const avatarSource = { uri: buildAvatarUrl(`${item.id}-${item.petName ?? item.name}`, "bottts") };
+
+    const displayName = item.petName ?? item.name;
+    const subtitle = item.lastMessage
+      ? item.lastMessage.length > 60
+        ? item.lastMessage.slice(0, 60) + "..."
+        : item.lastMessage
+      : "Toca para abrir la conversación.";
 
     return (
       <TouchableOpacity
@@ -94,16 +83,20 @@ export default function RoomsScreen() {
           <View style={styles.roomContent}>
             <View style={styles.roomTopRow}>
               <Text style={styles.roomName} numberOfLines={1}>
-                {item.name}
+                {displayName}
               </Text>
-              <Text style={styles.roomDate}>{item.createdAt.toLocaleDateString()}</Text>
+              <Text style={styles.roomDate}>
+                {item.lastMessageAt
+                  ? item.lastMessageAt.toLocaleDateString()
+                  : item.createdAt.toLocaleDateString()}
+              </Text>
             </View>
             <View style={styles.roomBottomRow}>
               <Text style={styles.roomPreview} numberOfLines={1}>
-                Toca para abrir la sala y continuar la conversación.
+                {subtitle}
               </Text>
               <View style={styles.roomPill}>
-                <Text style={styles.roomPillText}>Open</Text>
+                <Text style={styles.roomPillText}>Chat</Text>
               </View>
             </View>
           </View>
@@ -151,9 +144,13 @@ export default function RoomsScreen() {
 
             <View style={styles.heroRow}>
               <View style={styles.heroTextBlock}>
-                <Text style={styles.title}>Messages</Text>
+                <Text style={styles.title}>
+                  {isRefugio ? "Adopciones" : "Mis adopciones"}
+                </Text>
                 <Text style={styles.subtitle}>
-                  {filteredRooms.length} active conversations
+                  {filteredRooms.length > 0
+                    ? `${filteredRooms.length} conversación${filteredRooms.length !== 1 ? "es" : ""} activa${filteredRooms.length !== 1 ? "s" : ""}`
+                    : "Conversaciones sobre adopciones"}
                 </Text>
               </View>
               <View style={styles.stackAvatars}>
@@ -164,7 +161,7 @@ export default function RoomsScreen() {
                   <Image source={{ uri: buildAvatarUrl("team-alpha", "bottts") }} style={styles.stackAvatarImage} resizeMode="cover" />
                 </View>
                 <View style={styles.stackAvatarCount}>
-                  <Text style={styles.stackAvatarCountText}>+12</Text>
+                  <Text style={styles.stackAvatarCountText}>+{Math.max(0, rooms.length)}</Text>
                 </View>
               </View>
             </View>
@@ -175,82 +172,32 @@ export default function RoomsScreen() {
                 style={styles.searchInput}
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Search chats and rooms..."
+                placeholder="Buscar conversaciones..."
                 placeholderTextColor="#777586"
               />
             </View>
 
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recent Chats</Text>
+              <Text style={styles.sectionTitle}>
+                {isRefugio ? "Solicitudes con chat" : "Mis conversaciones"}
+              </Text>
             </View>
           </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>✦</Text>
-            <Text style={styles.emptyTitle}>No hay chats</Text>
+            <Text style={styles.emptyIcon}>🐾</Text>
+            <Text style={styles.emptyTitle}>Sin conversaciones</Text>
             <Text style={styles.empty}>
-              {user?.role === "refugio"
-                ? "Crea una sala para empezar a atender consultas."
-                : "Crea una sala para comunicarte con el refugio."}
+              {isRefugio
+                ? "Cuando alguien solicite adoptar una mascota, aparecerá aquí su conversación."
+                : "Solicita adoptar una mascota para iniciar una conversación con el refugio."}
             </Text>
           </View>
         }
       />
 
-      {canCreateRooms ? (
-        <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)} activeOpacity={0.9}>
-          <Text style={styles.fabText}>💬</Text>
-        </TouchableOpacity>
-      ) : null}
-
       <BottomNav active="chat" />
-
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.overlay}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            onPress={() => setModalVisible(false)}
-          />
-          <View style={styles.dialog}>
-            <Text style={styles.dialogKicker}>Create room</Text>
-            <Text style={styles.dialogTitle}>Nueva sala</Text>
-            {createError && <Text style={styles.dialogError}>{createError}</Text>}
-            <TextInput
-              style={styles.dialogInput}
-              placeholder="Nombre de la sala"
-              value={roomName}
-              onChangeText={setRoomName}
-              autoFocus
-              maxLength={50}
-            />
-            <View style={styles.dialogActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.cancelText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.createBtn, isCreating && { opacity: 0.6 }]}
-                onPress={handleCreate}
-                disabled={isCreating}
-              >
-                {isCreating ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.createText}>Crear</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -553,157 +500,4 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-  fab: {
-    position: "absolute",
-    right: 24,
-    bottom: 110,
-    backgroundColor: "#4da8c4",
-    width: 64,
-    height: 64,
-    borderRadius: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 6,
-    shadowColor: "#4da8c4",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.36,
-    shadowRadius: 18,
-  },
-  fabText: {
-    color: "#fff",
-    fontSize: 28,
-    lineHeight: 30,
-    fontWeight: "800",
-  },
-  bottomNav: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 22,
-    backgroundColor: "rgba(240,247,250,0.95)",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(77,168,196,0.12)",
-  },
-  bottomNavInner: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 26,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "rgba(77,168,196,0.1)",
-    shadowColor: "#4da8c4",
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: -6 },
-  },
-  navItemActive: {
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(77,168,196,0.1)",
-    borderRadius: 18,
-    paddingHorizontal: 30,
-    paddingVertical: 10,
-  },
-  navItem: {
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 30,
-    paddingVertical: 10,
-  },
-  navIconActive: {
-    color: "#4da8c4",
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  navLabelActive: {
-    color: "#4da8c4",
-    fontSize: 12,
-    marginTop: 4,
-    fontWeight: "800",
-  },
-  navIcon: {
-    color: "rgba(77,168,196,0.5)",
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  navLabel: {
-    color: "rgba(77,168,196,0.5)",
-    fontSize: 12,
-    marginTop: 4,
-    fontWeight: "700",
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(77,168,196,0.3)",
-    justifyContent: "center",
-    padding: 24,
-  },
-  dialog: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(77,168,196,0.15)",
-  },
-  dialogKicker: {
-    color: "#4da8c4",
-    textTransform: "uppercase",
-    letterSpacing: 1.6,
-    fontSize: 12,
-    fontWeight: "800",
-    marginBottom: 6,
-  },
-  dialogTitle: {
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: "800",
-    color: "#1a3a4a",
-    marginBottom: 12,
-  },
-  dialogError: {
-    color: "#ba1a1a",
-    backgroundColor: "#ffdad6",
-    borderRadius: 14,
-    fontSize: 13,
-    marginBottom: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  dialogInput: {
-    borderWidth: 1,
-    borderColor: "rgba(77,168,196,0.2)",
-    backgroundColor: "#f0f7fa",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 16,
-    color: "#1a3a4a",
-  },
-  dialogActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 10,
-  },
-  cancelBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: "rgba(77,168,196,0.1)",
-  },
-  cancelText: { color: "#4da8c4", fontSize: 15, fontWeight: "700" },
-  createBtn: {
-    backgroundColor: "#4da8c4",
-    borderRadius: 14,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-  createText: { color: "#fff", fontWeight: "800", fontSize: 15 },
 });
-

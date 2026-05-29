@@ -2,28 +2,68 @@ import { Message } from "@features/chat/domain/entities/Message";
 import { Room } from "@features/chat/domain/entities/Room";
 import { IChatRepository, SendMessageInput } from "@features/chat/domain/repositories/IChatRepository";
 import { supabase } from "@shared/infrastructure/supabase/client";
-// Use legacy API to avoid deprecation warnings in Expo SDK 54
 const FileSystem: any = require('expo-file-system/legacy');
 export class SupabaseChatRepository implements IChatRepository {
-  // El nombre exacto del bucket en Supabase (sensible a mayúsculas):
   private readonly imagesBucket = "Imagenes";
- 
-  async getRooms(): Promise<Room[]> {
+
+  async getRooms(userId: string, _role: string): Promise<Room[]> {
     const { data, error } = await supabase
-      .from('rooms').select('*')
+      .from('rooms').select(`
+        id, name, created_by, created_at,
+        pet_id, adoptante_id, refugio_id
+      `)
+      .or(`adoptante_id.eq.${userId},refugio_id.eq.${userId}`)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return (data ?? []).map(this.mapRoom);
+
+    const rooms = (data ?? []).map(this.mapRoom);
+
+    const enriched = await Promise.all(
+      rooms.map(async (room) => {
+        let petName: string | undefined;
+        if (room.petId) {
+          const { data: pet } = await supabase
+            .from('pets').select('name').eq('id', room.petId).maybeSingle();
+          petName = pet?.name ?? undefined;
+        }
+        const { data: lastMsg } = await supabase
+          .from('messages')
+          .select('content, created_at')
+          .eq('room_id', room.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        return {
+          ...room,
+          petName,
+          lastMessage: lastMsg?.content ?? undefined,
+          lastMessageAt: lastMsg?.created_at ? new Date(lastMsg.created_at) : undefined,
+        };
+      }),
+    );
+
+    enriched.sort((a, b) => {
+      const aTime = a.lastMessageAt?.getTime() ?? a.createdAt.getTime();
+      const bTime = b.lastMessageAt?.getTime() ?? b.createdAt.getTime();
+      return bTime - aTime;
+    });
+
+    return enriched;
   }
- 
-  async createRoom(name: string, userId: string): Promise<Room> {
+
+  async createRoom(name: string, createdBy: string, petId?: string, adoptanteId?: string, refugioId?: string): Promise<Room> {
+    const payload: Record<string, any> = { name, created_by: createdBy };
+    if (petId) payload.pet_id = petId;
+    if (adoptanteId) payload.adoptante_id = adoptanteId;
+    if (refugioId) payload.refugio_id = refugioId;
+
     const { data, error } = await supabase
-      .from('rooms').insert({ name, created_by: userId })
+      .from('rooms').insert(payload)
       .select().single();
     if (error) throw error;
     return this.mapRoom(data);
   }
- 
+
   async getMessages(roomId: string): Promise<Message[]> {
     const { data, error } = await supabase
       .from('messages')
@@ -33,7 +73,6 @@ export class SupabaseChatRepository implements IChatRepository {
       .limit(50);
     if (error) throw error;
     const msgs = (data ?? []) as any[];
-    // Obtener usernames de una sola vez
     const userIds = Array.from(new Set(msgs.map((m) => m.user_id)));
     let profilesMap: Record<string, string | undefined> = {};
     if (userIds.length > 0) {
@@ -48,13 +87,11 @@ export class SupabaseChatRepository implements IChatRepository {
     }
     const mapped = msgs.map((raw) => {
       const username = profilesMap[raw.user_id];
-      const mappedMsg = this.mapMessage({ ...raw, profiles: { username } });
-      console.log('[SupabaseChatRepository] mapped message', { id: mappedMsg.id, userId: mappedMsg.userId, authorUsername: mappedMsg.authorUsername });
-      return mappedMsg;
+      return this.mapMessage({ ...raw, profiles: { username } });
     });
     return mapped;
   }
- 
+
   async sendMessage(roomId: string, userId: string, input: SendMessageInput): Promise<Message> {
     const imageUrl = input.imageUri ? await this.uploadImage(roomId, userId, input.imageUri) : null;
     const { data, error } = await supabase
@@ -69,11 +106,9 @@ export class SupabaseChatRepository implements IChatRepository {
       .select('username')
       .eq('id', userId)
       .single();
-    const mapped = this.mapMessage({ ...msg, profiles: { username: profile?.username } });
-    console.log('[SupabaseChatRepository] sendMessage inserted', { id: mapped.id, userId: mapped.userId, authorUsername: mapped.authorUsername });
-    return mapped;
+    return this.mapMessage({ ...msg, profiles: { username: profile?.username } });
   }
- 
+
   subscribeToRoom(roomId: string, onMessage: (msg: Message) => void): () => void {
     const channel = supabase
       .channel(`room:${roomId}`)
@@ -82,12 +117,9 @@ export class SupabaseChatRepository implements IChatRepository {
           table: 'messages', filter: `room_id=eq.${roomId}`,
         },
         async (payload) => {
-          console.log('[SupabaseChatRepository] realtime payload', payload?.new?.id, payload?.new?.user_id);
-          // El payload no incluye el username — se obtiene con una query extra
           const { data: profile } = await supabase
             .from('profiles').select('username')
             .eq('id', payload.new.user_id).single();
-          console.log('[SupabaseChatRepository] realtime profile', { userId: payload.new.user_id, username: profile?.username });
           onMessage({
             id:             payload.new.id,
             roomId:         payload.new.room_id,
@@ -99,15 +131,18 @@ export class SupabaseChatRepository implements IChatRepository {
           });
         }
       ).subscribe();
- 
+
     return () => { supabase.removeChannel(channel); };
   }
- 
+
   private mapRoom = (raw: any): Room => ({
     id: raw.id, name: raw.name,
     createdBy: raw.created_by, createdAt: new Date(raw.created_at),
+    petId: raw.pet_id ?? undefined,
+    adoptanteId: raw.adoptante_id ?? undefined,
+    refugioId: raw.refugio_id ?? undefined,
   });
- 
+
   private mapMessage = (raw: any): Message => ({
     id: raw.id, roomId: raw.room_id, userId: raw.user_id,
     content: raw.content, imageUrl: raw.image_url ?? raw.imageUrl ?? null, createdAt: new Date(raw.created_at),
@@ -119,7 +154,6 @@ export class SupabaseChatRepository implements IChatRepository {
     const filePath = `${roomId}/${userId}/${Date.now()}.${extension}`;
     const contentType = `image/${extension}`;
 
-    // 1) Native file upload via expo-file-system (avoids React Native Blob limitations)
     try {
       const sessionRes: any = await supabase.auth.getSession?.();
       const session = sessionRes?.data?.session ?? sessionRes?.session ?? null;
@@ -128,7 +162,6 @@ export class SupabaseChatRepository implements IChatRepository {
 
       const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${this.imagesBucket}/${filePath}`;
 
-      console.log('[SupabaseChatRepository] uploading via native uploadAsync', { filePath, contentType });
       const result = await FileSystem.uploadAsync(uploadUrl, imageUri, {
         httpMethod: 'PUT',
         uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
@@ -140,7 +173,6 @@ export class SupabaseChatRepository implements IChatRepository {
 
       if (result.status >= 200 && result.status < 300) {
         const publicUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${this.imagesBucket}/${filePath}`;
-        console.log('[SupabaseChatRepository] uploaded image (native)', publicUrl);
         return publicUrl;
       }
 
@@ -149,7 +181,6 @@ export class SupabaseChatRepository implements IChatRepository {
       console.warn('[SupabaseChatRepository] native upload failed, trying base64 fallback', nativeErr);
     }
 
-    // 2) Fallback: base64 -> Uint8Array -> direct PUT (no Blob)
     try {
       const sessionRes: any = await supabase.auth.getSession?.();
       const session = sessionRes?.data?.session ?? sessionRes?.session ?? null;
@@ -175,7 +206,6 @@ export class SupabaseChatRepository implements IChatRepository {
 
       if (putRes.ok) {
         const publicUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${this.imagesBucket}/${filePath}`;
-        console.log('[SupabaseChatRepository] uploaded image (base64->Uint8Array)', publicUrl);
         return publicUrl;
       }
 

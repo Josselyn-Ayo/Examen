@@ -18,7 +18,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
 import catFace from "../../assets/animations/cat_face.json";
 import catPaw from "../../assets/animations/cat_paw.json";
-import pawWalk from "../../assets/animations/paw_walk.json";
+import heart from "../../assets/animations/heart.json";
+import chatLoading from "../../assets/animations/chat_loading.json";
 
 const PRIMARY = "#4da8c4";
 const PRIMARY_LIGHT = "rgba(77,168,196,0.12)";
@@ -93,7 +94,7 @@ export default function AiAssistantScreen() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           ListHeaderComponent={
             <View style={styles.welcomeSection}>
-              <LottieView source={pawWalk} autoPlay loop style={styles.welcomeLottie} />
+              <LottieView source={heart} autoPlay loop style={styles.welcomeLottie} />
               <Text style={styles.welcomeTitle}>Hola, soy PetCare AI</Text>
               <Text style={styles.welcomeSub}>
                 Tu asistente veterinario personal. Pregúntame lo que quieras sobre tus mascotas.
@@ -155,7 +156,7 @@ export default function AiAssistantScreen() {
         {isLoading && (
           <View style={styles.typingIndicator}>
             <View style={styles.typingBubble}>
-              <LottieView source={pawWalk} autoPlay loop style={styles.typingLottie} />
+              <LottieView source={chatLoading} autoPlay loop style={styles.typingLottie} />
               <Text style={styles.typingText}>Pensando...</Text>
             </View>
           </View>

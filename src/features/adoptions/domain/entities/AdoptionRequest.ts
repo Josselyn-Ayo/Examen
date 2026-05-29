@@ -7,8 +7,10 @@ export interface AdoptionRequest {
   adoptanteId: string;
   adoptanteName: string | null;
   refugioId: string;
+  refugioName: string | null;
   status: AdoptionStatus;
   message: string;
   createdAt: Date;
   updatedAt: Date;
+  roomId?: string;
 }

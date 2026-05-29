@@ -6,7 +6,7 @@ export class SupabaseAdoptionRepository implements IAdoptionRepository {
   async getRequestsForShelter(refugioId: string): Promise<AdoptionRequest[]> {
     const { data, error } = await supabase
       .from("adoption_requests")
-      .select("id, pet_id, adoptante_id, refugio_id, status, message, created_at, updated_at")
+      .select("id, pet_id, adoptante_id, refugio_id, status, message, room_id, created_at, updated_at")
       .eq("refugio_id", refugioId)
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -16,7 +16,7 @@ export class SupabaseAdoptionRepository implements IAdoptionRepository {
   async getRequestsForAdoptante(adoptanteId: string): Promise<AdoptionRequest[]> {
     const { data, error } = await supabase
       .from("adoption_requests")
-      .select("id, pet_id, adoptante_id, refugio_id, status, message, created_at, updated_at")
+      .select("id, pet_id, adoptante_id, refugio_id, status, message, room_id, created_at, updated_at")
       .eq("adoptante_id", adoptanteId)
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -41,7 +41,7 @@ export class SupabaseAdoptionRepository implements IAdoptionRepository {
         message,
         status: "pendiente",
       })
-      .select("id, pet_id, adoptante_id, refugio_id, status, message, created_at, updated_at")
+      .select("id, pet_id, adoptante_id, refugio_id, status, message, room_id, created_at, updated_at")
       .single();
     if (error) throw error;
     return {
@@ -51,8 +51,10 @@ export class SupabaseAdoptionRepository implements IAdoptionRepository {
       adoptanteId: data.adoptante_id,
       adoptanteName: null,
       refugioId: data.refugio_id,
+      refugioName: null,
       status: data.status as AdoptionStatus,
       message: data.message,
+      roomId: data.room_id ?? undefined,
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at ?? data.created_at),
     };
@@ -63,7 +65,7 @@ export class SupabaseAdoptionRepository implements IAdoptionRepository {
       .from("adoption_requests")
       .update({ status })
       .eq("id", requestId)
-      .select("id, pet_id, adoptante_id, refugio_id, status, message, created_at, updated_at")
+      .select("id, pet_id, adoptante_id, refugio_id, status, message, room_id, created_at, updated_at")
       .single();
     if (error) throw error;
 
@@ -78,10 +80,18 @@ export class SupabaseAdoptionRepository implements IAdoptionRepository {
     return this.enrich(data);
   }
 
+  async updateRoomId(requestId: string, roomId: string): Promise<void> {
+    await supabase
+      .from("adoption_requests")
+      .update({ room_id: roomId })
+      .eq("id", requestId);
+  }
+
   private async enrich(raw: any): Promise<AdoptionRequest> {
-    const [{ data: pet }, { data: profile }] = await Promise.all([
+    const [{ data: pet }, { data: profile }, { data: shelterProfile }] = await Promise.all([
       supabase.from("pets").select("name").eq("id", raw.pet_id).maybeSingle(),
       supabase.from("profiles").select("username").eq("id", raw.adoptante_id).maybeSingle(),
+      supabase.from("profiles").select("username").eq("id", raw.refugio_id).maybeSingle(),
     ]);
     return {
       id: raw.id,
@@ -90,8 +100,10 @@ export class SupabaseAdoptionRepository implements IAdoptionRepository {
       adoptanteId: raw.adoptante_id,
       adoptanteName: profile?.username ?? null,
       refugioId: raw.refugio_id,
+      refugioName: shelterProfile?.username ?? null,
       status: raw.status as AdoptionStatus,
       message: raw.message ?? "",
+      roomId: raw.room_id ?? undefined,
       createdAt: new Date(raw.created_at),
       updatedAt: new Date(raw.updated_at ?? raw.created_at),
     };

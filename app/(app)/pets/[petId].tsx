@@ -25,12 +25,12 @@ export default function PetDetailScreen() {
   const { petId } = useLocalSearchParams<{ petId: string }>();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const { pets, myPets, deletePet, isDeleting } = usePets();
+  const { pets, myPets, adoptedPets, deletePet, isDeleting } = usePets();
   const { createRequest, isCreating: isRequesting } = useAdoptions();
   const [showAdoptModal, setShowAdoptModal] = useState(false);
   const [adoptMessage, setAdoptMessage] = useState("");
 
-  const allPets = [...pets, ...myPets];
+  const allPets = [...pets, ...myPets, ...adoptedPets];
   const pet = allPets.find((p) => p.id === petId);
   const isRefugio = user?.role === "refugio";
   const isOwner = pet?.shelterId === user?.id;
@@ -165,19 +165,6 @@ export default function PetDetailScreen() {
             </View>
           )}
 
-          {pet.size && (
-            <View style={styles.descriptionBlock}>
-              <Text style={styles.descriptionTitle}>Tamaño</Text>
-              <View style={styles.personalityBadge}>
-                <Text style={styles.personalityBadgeText}>
-                  {pet.size === "pequeno" ? "🐣 Pequeño" :
-                   pet.size === "mediano" ? "🐕 Mediano" :
-                   "🦮 Grande"}
-                </Text>
-              </View>
-            </View>
-          )}
-
           {pet.imageUrls && pet.imageUrls.length > 1 && (
             <View style={styles.descriptionBlock}>
               <Text style={styles.descriptionTitle}>Más fotos</Text>
@@ -237,45 +224,45 @@ export default function PetDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#0c0e12" },
-  bgMesh: { ...StyleSheet.absoluteFillObject, backgroundColor: "#0c0e12" },
+  safeArea: { flex: 1, backgroundColor: "#f0f7fa" },
+  bgMesh: { ...StyleSheet.absoluteFillObject, backgroundColor: "#f0f7fa" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 40 },
   backBtn: { paddingVertical: 10 },
-  backText: { color: "#cebdff", fontSize: 15, fontWeight: "700" },
-  heroImage: { width: "100%", height: 220, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.05)", alignItems: "center", justifyContent: "center", overflow: "hidden", marginBottom: 16 },
+  backText: { color: "#4da8c4", fontSize: 15, fontWeight: "700" },
+  heroImage: { width: "100%", height: 220, borderRadius: 24, backgroundColor: "rgba(77,168,196,0.08)", alignItems: "center", justifyContent: "center", overflow: "hidden", marginBottom: 16 },
   heroImg: { width: "100%", height: "100%" },
   heroEmoji: { fontSize: 72 },
-  card: { backgroundColor: "rgba(255,255,255,0.045)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", borderRadius: 24, padding: 20 },
+  card: { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "rgba(77,168,196,0.12)", borderRadius: 24, padding: 20, shadowColor: "#4da8c4", shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
   nameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  petName: { fontSize: 24, fontWeight: "800", color: "#f4e9ff", flex: 1 },
-  statusPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)" },
-  statusGreen: { backgroundColor: "rgba(5,150,105,0.2)" },
-  statusText: { fontSize: 11, fontWeight: "700", color: "#cebdff", textTransform: "uppercase" },
+  petName: { fontSize: 24, fontWeight: "800", color: "#1a3a4a", flex: 1 },
+  statusPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: "rgba(77,168,196,0.08)" },
+  statusGreen: { backgroundColor: "rgba(5,150,105,0.15)" },
+  statusText: { fontSize: 11, fontWeight: "700", color: "#4da8c4", textTransform: "uppercase" },
   detailsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 16 },
-  detailItem: { flex: 1, minWidth: "40%", backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 14, padding: 12 },
-  detailLabel: { color: "rgba(244,233,255,0.5)", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 },
-  detailValue: { color: "#f4e9ff", fontSize: 14, fontWeight: "600" },
+  detailItem: { flex: 1, minWidth: "40%", backgroundColor: "rgba(77,168,196,0.04)", borderRadius: 14, padding: 12 },
+  detailLabel: { color: "rgba(77,168,196,0.6)", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 },
+  detailValue: { color: "#1a3a4a", fontSize: 14, fontWeight: "600" },
   descriptionBlock: { marginBottom: 16 },
-  descriptionTitle: { color: "rgba(244,233,255,0.6)", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 6 },
-  descriptionText: { color: "#e8ddff", fontSize: 15, lineHeight: 22 },
-  adoptBtn: { backgroundColor: "#7c4dff", borderRadius: 16, paddingVertical: 16, alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
+  descriptionTitle: { color: "rgba(77,168,196,0.6)", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 6 },
+  descriptionText: { color: "#374151", fontSize: 15, lineHeight: 22 },
+  adoptBtn: { backgroundColor: "#4da8c4", borderRadius: 16, paddingVertical: 16, alignItems: "center", elevation: 3, shadowColor: "#4da8c4", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8 },
   adoptBtnText: { color: "#fff", fontSize: 16, fontWeight: "800" },
   ownerActions: { marginTop: 16 },
-  deleteBtn: { backgroundColor: "rgba(220,38,38,0.15)", borderRadius: 14, paddingVertical: 14, alignItems: "center", borderWidth: 1, borderColor: "rgba(220,38,38,0.3)" },
-  deleteBtnText: { color: "#ff6b6b", fontWeight: "700" },
-  personalityBadge: { alignSelf: "flex-start", backgroundColor: "rgba(206,189,255,0.15)", borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(206,189,255,0.25)" },
-  personalityBadgeText: { color: "#cebdff", fontSize: 13, fontWeight: "700" },
+  deleteBtn: { backgroundColor: "rgba(220,38,38,0.1)", borderRadius: 14, paddingVertical: 14, alignItems: "center", borderWidth: 1, borderColor: "rgba(220,38,38,0.2)" },
+  deleteBtnText: { color: "#ef4444", fontWeight: "700" },
+  personalityBadge: { alignSelf: "flex-start", backgroundColor: "rgba(77,168,196,0.1)", borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(77,168,196,0.2)" },
+  personalityBadgeText: { color: "#4da8c4", fontSize: 13, fontWeight: "700" },
   moreImagesRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  moreImage: { width: 90, height: 90, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.05)" },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(19,27,46,0.45)", justifyContent: "center", padding: 24 },
-  dialog: { backgroundColor: "rgba(20,14,36,0.97)", borderRadius: 24, padding: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  dialogTitle: { fontSize: 22, fontWeight: "800", color: "#f4e9ff", marginBottom: 8 },
-  dialogSubtitle: { color: "rgba(244,233,255,0.7)", fontSize: 14, marginBottom: 14 },
-  dialogInput: { borderWidth: 1, borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10, color: "#f4e9ff", fontSize: 15, minHeight: 80 },
+  moreImage: { width: 90, height: 90, borderRadius: 14, backgroundColor: "rgba(77,168,196,0.05)" },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(77,168,196,0.3)", justifyContent: "center", padding: 24 },
+  dialog: { backgroundColor: "#FFFFFF", borderRadius: 24, padding: 20, borderWidth: 1, borderColor: "rgba(77,168,196,0.15)" },
+  dialogTitle: { fontSize: 22, fontWeight: "800", color: "#1a3a4a", marginBottom: 8 },
+  dialogSubtitle: { color: "rgba(77,168,196,0.7)", fontSize: 14, marginBottom: 14 },
+  dialogInput: { borderWidth: 1, borderColor: "rgba(77,168,196,0.2)", backgroundColor: "#f0f7fa", borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10, color: "#1a3a4a", fontSize: 15, minHeight: 80 },
   dialogActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10 },
-  cancelBtn: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.06)" },
-  cancelText: { color: "#cebdff", fontSize: 15, fontWeight: "700" },
-  createBtn: { backgroundColor: "#7c4dff", borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12 },
+  cancelBtn: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, backgroundColor: "rgba(77,168,196,0.1)" },
+  cancelText: { color: "#4da8c4", fontSize: 15, fontWeight: "700" },
+  createBtn: { backgroundColor: "#4da8c4", borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12 },
   createText: { color: "#fff", fontWeight: "800", fontSize: 15 },
 });

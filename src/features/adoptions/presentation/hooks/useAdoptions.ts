@@ -2,12 +2,14 @@ import { useAuthStore } from "@features/auth/presentation/store/authStore";
 import { CreateAdoptionRequestUseCase } from "@features/adoptions/application/use-cases/CreateAdoptionRequestUseCase";
 import { GetAdoptionRequestsUseCase } from "@features/adoptions/application/use-cases/GetAdoptionRequestsUseCase";
 import { RespondAdoptionRequestUseCase } from "@features/adoptions/application/use-cases/RespondAdoptionRequestUseCase";
-import { AdoptionStatus } from "@features/adoptions/domain/entities/AdoptionRequest";
+import { AdoptionRequest, AdoptionStatus } from "@features/adoptions/domain/entities/AdoptionRequest";
 import { SupabaseAdoptionRepository } from "@features/adoptions/infrastructure/repositories/SupabaseAdoptionRepository";
+import { SupabaseChatRepository } from "@features/chat/infrastructure/repositories/SupabaseChatRepository";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const adoptionRepo = new SupabaseAdoptionRepository();
-const createRequestUseCase = new CreateAdoptionRequestUseCase(adoptionRepo);
+const chatRepo = new SupabaseChatRepository();
+const createRequestUseCase = new CreateAdoptionRequestUseCase(adoptionRepo, chatRepo);
 const respondRequestUseCase = new RespondAdoptionRequestUseCase(adoptionRepo);
 const getRequestsUseCase = new GetAdoptionRequestsUseCase(adoptionRepo);
 
@@ -36,6 +38,7 @@ export function useAdoptions() {
       queryClient.invalidateQueries({ queryKey: ["pets"] });
       queryClient.invalidateQueries({ queryKey: ["adopted-pets"] });
       queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
     },
   });
 
@@ -51,6 +54,21 @@ export function useAdoptions() {
     },
   });
 
+  const ensureRoomMutation = useMutation({
+    mutationFn: async (request: AdoptionRequest) => {
+      if (request.roomId) return request.roomId;
+      const petName = request.petName ?? "Mascota";
+      const room = await chatRepo.createRoom(petName, user!.id, request.petId, request.adoptanteId, request.refugioId);
+      await adoptionRepo.updateRoomId(request.id, room.id);
+      return room.id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adoption-requests-shelter"] });
+      queryClient.invalidateQueries({ queryKey: ["adoption-requests-adoptante"] });
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
+    },
+  });
+
   return {
     shelterRequests,
     adoptanteRequests,
@@ -58,6 +76,8 @@ export function useAdoptions() {
     isLoadingAdoptante,
     createRequest: createMutation.mutate,
     respondRequest: respondMutation.mutate,
+    ensureRoom: ensureRoomMutation.mutateAsync,
+    isEnsuringRoom: ensureRoomMutation.isPending,
     isCreating: createMutation.isPending,
     isResponding: respondMutation.isPending,
     createError: createMutation.error?.message ?? null,

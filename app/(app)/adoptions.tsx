@@ -22,7 +22,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 export default function AdoptionsScreen() {
   const user = useAuthStore((s) => s.user);
   const router = useRouter();
-  const { shelterRequests, adoptanteRequests, isLoadingShelter, isLoadingAdoptante, respondRequest, isResponding } = useAdoptions();
+  const { shelterRequests, adoptanteRequests, isLoadingShelter, isLoadingAdoptante, respondRequest, isResponding, ensureRoom, isEnsuringRoom } = useAdoptions();
   const isRefugio = user?.role === "refugio";
   const requests = isRefugio ? shelterRequests : adoptanteRequests;
   const isLoading = isRefugio ? isLoadingShelter : isLoadingAdoptante;
@@ -80,6 +80,7 @@ export default function AdoptionsScreen() {
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
             const statusInfo = STATUS_LABELS[item.status] ?? { label: item.status, color: "#999" };
+            const tieneChat = !!item.roomId;
             return (
               <View style={styles.requestCard}>
                 <View style={styles.requestHeader}>
@@ -92,31 +93,59 @@ export default function AdoptionsScreen() {
                 {isRefugio && item.adoptanteName && (
                   <Text style={styles.requestFrom}>De: {item.adoptanteName}</Text>
                 )}
+                {!isRefugio && (
+                  <Text style={styles.requestFrom}>De: {item.refugioName ?? "Refugio"}</Text>
+                )}
                 <Text style={styles.requestMessage} numberOfLines={3}>{item.message}</Text>
                 <Text style={styles.requestDate}>
                   {item.createdAt.toLocaleDateString()}
                 </Text>
 
-                {isRefugio && item.status === "pendiente" && (
-                  <View style={styles.actionRow}>
+                <View style={styles.actionRow}>
+                  {isRefugio && item.status === "pendiente" && (
+                    <>
+                      <Pressable
+                        style={styles.approveBtn}
+                        onPress={() => respondRequest({ requestId: item.id, status: "aprobada" })}
+                        disabled={isResponding}
+                      >
+                        <Feather name="check" size={14} color="#059669" />
+                        <Text style={styles.approveBtnText}>Aprobar</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.rejectBtn}
+                        onPress={() => respondRequest({ requestId: item.id, status: "rechazada" })}
+                        disabled={isResponding}
+                      >
+                        <Feather name="x" size={14} color="#EF4444" />
+                        <Text style={styles.rejectBtnText}>Rechazar</Text>
+                      </Pressable>
+                    </>
+                  )}
+                  {tieneChat ? (
                     <Pressable
-                      style={styles.approveBtn}
-                      onPress={() => respondRequest({ requestId: item.id, status: "aprobada" })}
-                      disabled={isResponding}
+                      style={styles.chatBtn}
+                      onPress={() => router.push(`/(app)/chat/${item.roomId}`)}
                     >
-                      <Feather name="check" size={14} color="#059669" />
-                      <Text style={styles.approveBtnText}>Aprobar</Text>
+                      <Feather name="message-circle" size={16} color="#fff" />
+                      <Text style={styles.chatBtnText}>Ir al Chat</Text>
                     </Pressable>
+                  ) : (
                     <Pressable
-                      style={styles.rejectBtn}
-                      onPress={() => respondRequest({ requestId: item.id, status: "rechazada" })}
-                      disabled={isResponding}
+                      style={[styles.chatBtn, isEnsuringRoom && { opacity: 0.6 }]}
+                      onPress={async () => {
+                        try {
+                          const roomId = await ensureRoom(item);
+                          router.push(`/(app)/chat/${roomId}`);
+                        } catch {}
+                      }}
+                      disabled={isEnsuringRoom}
                     >
-                      <Feather name="x" size={14} color="#EF4444" />
-                      <Text style={styles.rejectBtnText}>Rechazar</Text>
+                      <Feather name="message-circle" size={16} color="#fff" />
+                      <Text style={styles.chatBtnText}>{isEnsuringRoom ? "Creando..." : "Ir al Chat"}</Text>
                     </Pressable>
-                  </View>
-                )}
+                  )}
+                </View>
               </View>
             );
           }}
@@ -189,11 +218,40 @@ const styles = StyleSheet.create({
   requestFrom: { color: "#4da8c4", fontSize: 13, marginBottom: 4, fontWeight: "600" },
   requestMessage: { color: "#374151", fontSize: 14, lineHeight: 20, marginBottom: 8 },
   requestDate: { color: "#8bb8c8", fontSize: 12, fontWeight: "600" },
-  actionRow: { flexDirection: "row", gap: 10, marginTop: 12 },
+  actionRow: { flexDirection: "row", gap: 10, marginTop: 12, flexWrap: "wrap" },
   approveBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 12, backgroundColor: "rgba(5,150,105,0.1)", borderWidth: 1, borderColor: "rgba(5,150,105,0.2)" },
   approveBtnText: { color: "#059669", fontWeight: "700", fontSize: 14 },
   rejectBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 12, backgroundColor: "rgba(239,68,68,0.1)", borderWidth: 1, borderColor: "rgba(239,68,68,0.2)" },
   rejectBtnText: { color: "#EF4444", fontWeight: "700", fontSize: 14 },
+  chatBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: "#4da8c4",
+    elevation: 3,
+    shadowColor: "#4da8c4",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  chatBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  chatBtnDisabled: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: "rgba(77,168,196,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(77,168,196,0.12)",
+  },
+  chatBtnDisabledText: { color: "#b8d6e0", fontWeight: "600", fontSize: 13 },
 
   emptyState: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 60, paddingHorizontal: 20 },
   emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", marginBottom: 14, shadowColor: "#4da8c4", shadowOpacity: 0.08, shadowRadius: 10, elevation: 3 },

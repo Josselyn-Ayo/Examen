@@ -22,7 +22,7 @@ import {
 import LottieView from "lottie-react-native";
 import { BottomNav } from "../../../components/BottomNav";
 import catFace from "../../../assets/animations/cat_face.json";
-import pawWalk from "../../../assets/animations/paw_walk.json";
+import dogIntro from "../../../assets/animations/dog_intro.json";
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -153,7 +153,7 @@ export default function PetsScreen() {
     return (
       <SafeAreaView style={styles.safeArea} edges={["top"]}>
         <View style={styles.centered}>
-          <LottieView source={pawWalk} autoPlay loop style={styles.loadingLottie} />
+          <LottieView source={dogIntro} autoPlay loop style={styles.loadingLottie} />
           <Text style={styles.loadingText}>Cargando mascotas...</Text>
         </View>
       </SafeAreaView>

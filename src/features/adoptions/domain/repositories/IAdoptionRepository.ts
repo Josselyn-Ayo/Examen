@@ -5,4 +5,5 @@ export interface IAdoptionRepository {
   getRequestsForAdoptante(adoptanteId: string): Promise<AdoptionRequest[]>;
   createRequest(petId: string, adoptanteId: string, message: string): Promise<AdoptionRequest>;
   respondRequest(requestId: string, status: AdoptionRequest["status"]): Promise<AdoptionRequest>;
+  updateRoomId(requestId: string, roomId: string): Promise<void>;
 }

@@ -115,6 +115,11 @@ export function useMessageNotifications(activeRoomId: string | null) {
 
           const channel = supabase.channel(`message-notifications:${user.id}`);
 
+          // NOTE: Supabase Realtime filters only support simple column equality,
+          // not subqueries. We cannot filter by the user's room IDs server-side.
+          // This subscription receives ALL new messages system-wide and filters
+          // client-side below. At scale, consider a separate notification table
+          // or a Supabase Edge Function for targeted push notifications.
           channel.on(
             "postgres_changes",
             {
@@ -136,11 +141,16 @@ export function useMessageNotifications(activeRoomId: string | null) {
                 if (!message || message.user_id === user.id) return;
                 if (activeRoomIdRef.current && message.room_id === activeRoomIdRef.current) return;
 
-                const [{ data: room }, { data: profile }] = await Promise.all([
-                  supabase.from("rooms").select("name").eq("id", message.room_id).single(),
-                  supabase.from("profiles").select("username").eq("id", message.user_id).single(),
-                ]);
+                  const [{ data: room }, { data: profile }] = await Promise.all([
+                    supabase.from("rooms").select("name, pet_id").eq("id", message.room_id).single(),
+                    supabase.from("profiles").select("username").eq("id", message.user_id).single(),
+                  ]);
 
+                let petNameExtra = "";
+                if (room?.pet_id) {
+                  const { data: pet } = await supabase.from("pets").select("name").eq("id", room.pet_id).maybeSingle();
+                  petNameExtra = pet?.name ? ` (${pet.name})` : "";
+                }
                 const roomName = room?.name ?? "Chat";
                 const authorName = profile?.username ?? "Alguien";
                 const preview = buildMessagePreview(message.content || (message.image_url ? "Imagen" : "Nuevo mensaje"));
@@ -149,7 +159,7 @@ export function useMessageNotifications(activeRoomId: string | null) {
                   const Notif = await import('expo-notifications');
                   await Notif.scheduleNotificationAsync({
                     content: {
-                      title: `Nuevo mensaje en ${roomName}`,
+                      title: `Mensaje: ${roomName}${petNameExtra}`,
                       body: `${authorName}: ${preview}`,
                       data: {
                         roomId: message.room_id,

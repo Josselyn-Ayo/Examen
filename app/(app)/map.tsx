@@ -13,10 +13,10 @@ import WebView from "react-native-webview";
 import LottieView from "lottie-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
-import catFace from "../../assets/animations/cat_face.json";
 import catPaw from "../../assets/animations/cat_paw.json";
 import mapMarker from "../../assets/animations/map_marker.json";
-import pawWalk from "../../assets/animations/paw_walk.json";
+import heart from "../../assets/animations/heart.json";
+import dogIntro from "../../assets/animations/dog_intro.json";
 
 const ACCENT_COLORS = ["#4FC3F7", "#7C4DFF", "#81C784", "#FFB74D", "#F06292"];
 
@@ -111,7 +111,7 @@ export default function MapScreen() {
           <View style={styles.headerDecor1} />
           <View style={styles.headerDecor2} />
           <View style={styles.headerRow}>
-            <LottieView source={catFace} autoPlay loop style={styles.headerLottie} />
+            <LottieView source={heart} autoPlay loop style={styles.headerLottie} />
             <View style={styles.headerTextWrap}>
               <Text style={styles.title}>Refugios</Text>
               <Text style={styles.subtitle}>
@@ -140,7 +140,7 @@ export default function MapScreen() {
               startInLoadingState={true}
               renderLoading={() => (
                 <View style={styles.mapLoading}>
-                  <LottieView source={pawWalk} autoPlay loop style={styles.webviewLoadingLottie} />
+                  <LottieView source={dogIntro} autoPlay loop style={styles.webviewLoadingLottie} />
                   <Text style={styles.loadingText}>Cargando mapa...</Text>
                 </View>
               )}
@@ -148,7 +148,7 @@ export default function MapScreen() {
           </View>
         ) : (
           <View style={styles.mapLoading}>
-            <LottieView source={pawWalk} autoPlay loop style={styles.loadingLottie} />
+            <LottieView source={dogIntro} autoPlay loop style={styles.loadingLottie} />
             <Text style={styles.loadingText}>Cargando mapa...</Text>
           </View>
         )}
@@ -171,7 +171,7 @@ export default function MapScreen() {
             </View>
           ) : sheltersWithLocation.length === 0 ? (
             <View style={styles.emptyCard}>
-              <LottieView source={catFace} autoPlay loop style={styles.emptyLottie} />
+              <LottieView source={heart} autoPlay loop style={styles.emptyLottie} />
               <Text style={styles.emptyText}>
                 {isRefugio
                   ? "Registra tu ubicación en Perfil para aparecer aquí."

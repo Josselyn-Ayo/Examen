@@ -19,8 +19,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import LottieView from "lottie-react-native";
-import catPaw from "../../../assets/animations/cat_paw.json";
-import pawWalk from "../../../assets/animations/paw_walk.json";
+import chatLoading from "../../../assets/animations/chat_loading.json";
 
 export default function ChatScreen() {
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
@@ -29,7 +28,6 @@ export default function ChatScreen() {
   const router = useRouter();
   const [input, setInput] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -58,9 +56,7 @@ export default function ChatScreen() {
     });
 
     if (!result.canceled && result.assets[0]?.uri) {
-      setIsUploadingImage(true);
       setImageUri(result.assets[0].uri);
-      setIsUploadingImage(false);
     }
   }, []);
 
@@ -129,7 +125,7 @@ export default function ChatScreen() {
     );
   };
 
-  const chatPartner = messages.find((m) => m.authorUsername)?.authorUsername ?? "Chat";
+  const chatPartner = messages.find((m) => m.authorUsername && m.userId !== user?.id)?.authorUsername ?? "Chat";
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
@@ -192,10 +188,10 @@ export default function ChatScreen() {
             }
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <LottieView source={pawWalk} autoPlay loop style={styles.emptyLottie} />
+                <LottieView source={chatLoading} autoPlay loop style={styles.emptyLottie} />
                 <Text style={styles.emptyTitle}>Inicia la conversación</Text>
                 <Text style={styles.emptyText}>
-                  Escribe el primer mensaje en esta sala.
+                  Coordina la visita para conocer a la mascota.
                 </Text>
               </View>
             }
@@ -239,13 +235,13 @@ export default function ChatScreen() {
             <TouchableOpacity
               style={[
                 styles.sendBtn,
-                (!input.trim() && !imageUri) || isSending || isUploadingImage
+                (!input.trim() && !imageUri) || isSending
                   ? styles.sendBtnDisabled
                   : styles.sendBtnActive,
               ]}
               onPress={handleSend}
               activeOpacity={0.9}
-              disabled={isUploadingImage || isSending || (!input.trim() && !imageUri)}
+              disabled={isSending || (!input.trim() && !imageUri)}
             >
               <Ionicons
                 name="send"

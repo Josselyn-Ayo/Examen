@@ -8,7 +8,7 @@ export class DeletePetUseCase {
     try {
       await this.petRepo.deletePet(id);
     } catch (error) {
-      throw new AppError("PET_ERROR", error instanceof Error ? error.message : "Error al eliminar mascota", error);
+      throw new AppError("PET_ERROR", (error as any)?.message ?? String(error), error);
     }
   }
 }

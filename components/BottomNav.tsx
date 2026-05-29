@@ -1,50 +1,53 @@
-import { useAuthStore } from "@features/auth/presentation/store/authStore";
 import { useRouter } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 
 type TabId = "chat" | "pets" | "adoptions" | "ai" | "map" | "profile";
 
-const ADOPTANTE_TABS: { id: TabId; icon: string; label: string; route: string }[] = [
-  { id: "pets", icon: "🐾", label: "Mascotas", route: "/(app)/pets" },
-  { id: "ai", icon: "🤖", label: "IA", route: "/(app)/ai-assistant" },
-  { id: "map", icon: "🗺️", label: "Mapa", route: "/(app)/map" },
-  { id: "profile", icon: "👤", label: "Perfil", route: "/(app)/contacts" },
-];
-
-const REFUGIO_TABS: { id: TabId; icon: string; label: string; route: string }[] = [
-  { id: "chat", icon: "💬", label: "Chat", route: "/(app)" },
-  { id: "pets", icon: "🐾", label: "Mascotas", route: "/(app)/pets" },
-  { id: "adoptions", icon: "📋", label: "Solicitudes", route: "/(app)/adoptions" },
-  { id: "map", icon: "🗺️", label: "Mapa", route: "/(app)/map" },
-  { id: "profile", icon: "👤", label: "Perfil", route: "/(app)/contacts" },
+const ALL_TABS: { id: TabId; iconSet: "ion" | "feather" | "mc"; icon: string; label: string; route: string }[] = [
+  { id: "pets", iconSet: "mc", icon: "paw", label: "Mascotas", route: "/(app)/pets" },
+  { id: "chat", iconSet: "ion", icon: "chatbubble-outline", label: "Chat", route: "/(app)" },
+  { id: "ai", iconSet: "ion", icon: "sparkles-outline", label: "IA", route: "/(app)/ai-assistant" },
+  { id: "adoptions", iconSet: "feather", icon: "file-text", label: "Solicitudes", route: "/(app)/adoptions" },
+  { id: "map", iconSet: "feather", icon: "map-pin", label: "Mapa", route: "/(app)/map" },
+  { id: "profile", iconSet: "feather", icon: "user", label: "Perfil", route: "/(app)/contacts" },
 ];
 
 interface BottomNavProps {
   active: TabId;
 }
 
+function TabIcon({ iconSet, icon, size, color }: { iconSet: "ion" | "feather" | "mc"; icon: string; size: number; color: string }) {
+  if (iconSet === "ion") return <Ionicons name={icon as any} size={size} color={color} />;
+  if (iconSet === "mc") return <MaterialCommunityIcons name={icon as any} size={size} color={color} />;
+  return <Feather name={icon as any} size={size} color={color} />;
+}
+
 export function BottomNav({ active }: BottomNavProps) {
-  const user = useAuthStore((s) => s.user);
   const router = useRouter();
-  const tabs = user?.role === "refugio" ? REFUGIO_TABS : ADOPTANTE_TABS;
 
   return (
-    <View style={styles.bottomNav}>
-      <View style={styles.bottomNavInner}>
-        {tabs.map((tab) => {
+    <View style={styles.container}>
+      <View style={styles.bar}>
+        {ALL_TABS.map((tab) => {
           const isActive = tab.id === active;
           return (
             <TouchableOpacity
               key={tab.id}
-              style={[styles.navItem, isActive && styles.navItemActive]}
+              style={[styles.tab, isActive && styles.tabActive]}
               activeOpacity={0.85}
               onPress={() => router.replace(tab.route as any)}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
             >
-              <Text style={[styles.navIcon, isActive && styles.navIconActive]}>
-                {tab.icon}
-              </Text>
-              <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>
+              <View style={[styles.iconWrap, isActive && styles.iconWrapActive]}>
+                <TabIcon
+                  iconSet={tab.iconSet}
+                  icon={tab.icon}
+                  size={isActive ? 16 : 14}
+                  color={isActive ? "#fff" : "#5EEAD4"}
+                />
+              </View>
+              <Text style={[styles.label, isActive && styles.labelActive]}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
@@ -56,59 +59,70 @@ export function BottomNav({ active }: BottomNavProps) {
 }
 
 const styles = StyleSheet.create({
-  bottomNav: {
+  container: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 20,
-    backgroundColor: "rgba(12,14,18,0.92)",
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 14,
+    backgroundColor: "#fff",
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.05)",
+    borderTopColor: "rgba(77,168,196,0.15)",
   },
-  bottomNavInner: {
+  bar: {
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderRadius: 26,
-    paddingVertical: 10,
+    backgroundColor: "#f0f7fa",
+    borderRadius: 20,
+    paddingVertical: 6,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
-    shadowColor: "#cebdff",
+    borderColor: "rgba(77,168,196,0.15)",
+    elevation: 4,
+    shadowColor: "#4da8c4",
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: -6 },
+    shadowRadius: 8,
   },
-  navItem: {
+  tab: {
     flexDirection: "column",
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    borderRadius: 14,
+    minWidth: 44,
   },
-  navItemActive: {
-    backgroundColor: "rgba(206,189,255,0.14)",
+  tabActive: {
+    backgroundColor: "#4da8c4",
+    elevation: 3,
+    shadowColor: "#4da8c4",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
-  navIcon: {
-    fontSize: 18,
-    color: "rgba(226,226,231,0.62)",
+  iconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
   },
-  navIconActive: {
-    color: "#cebdff",
-    fontWeight: "800",
+  iconWrapActive: {
+    backgroundColor: "transparent",
   },
-  navLabel: {
-    fontSize: 10,
-    color: "rgba(226,226,231,0.62)",
-    marginTop: 3,
+  label: {
+    fontSize: 7,
+    color: "#8bb8c8",
+    marginTop: 1,
     fontWeight: "700",
+    letterSpacing: 0.2,
   },
-  navLabelActive: {
-    color: "#cebdff",
+  labelActive: {
+    color: "#fff",
     fontWeight: "800",
   },
 });

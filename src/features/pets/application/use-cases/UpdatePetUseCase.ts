@@ -9,7 +9,7 @@ export class UpdatePetUseCase {
     try {
       return await this.petRepo.updatePet(id, input);
     } catch (error) {
-      throw new AppError("PET_ERROR", error instanceof Error ? error.message : "Error al actualizar mascota", error);
+      throw new AppError("PET_ERROR", (error as any)?.message ?? String(error), error);
     }
   }
 }

@@ -39,7 +39,7 @@ export default function PetDetailScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#cebdff" />
+          <ActivityIndicator size="large" color="#4da8c4" />
         </View>
       </SafeAreaView>
     );
@@ -113,6 +113,15 @@ export default function PetDetailScreen() {
                 <Text style={styles.detailValue}>{pet.age}</Text>
               </View>
             )}
+            {pet.size && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Tamaño</Text>
+                <Text style={styles.detailValue}>
+                  {pet.size === "pequeno" ? "🐣 Pequeño" :
+                   pet.size === "mediano" ? "🐕 Mediano" : "🦮 Grande"}
+                </Text>
+              </View>
+            )}
             {pet.shelterName && (
               <View style={styles.detailItem}>
                 <Text style={styles.detailLabel}>Refugio</Text>
@@ -127,6 +136,58 @@ export default function PetDetailScreen() {
               <Text style={styles.descriptionText}>{pet.description}</Text>
             </View>
           ) : null}
+
+          {pet.history ? (
+            <View style={styles.descriptionBlock}>
+              <Text style={styles.descriptionTitle}>Historial</Text>
+              <Text style={styles.descriptionText}>{pet.history}</Text>
+            </View>
+          ) : null}
+
+          {pet.personality ? (
+            <View style={styles.descriptionBlock}>
+              <Text style={styles.descriptionTitle}>Personalidad</Text>
+              <Text style={styles.descriptionText}>{pet.personality}</Text>
+            </View>
+          ) : null}
+
+          {pet.personalityType && (
+            <View style={styles.descriptionBlock}>
+              <Text style={styles.descriptionTitle}>Tipo de personalidad</Text>
+              <View style={styles.personalityBadge}>
+                <Text style={styles.personalityBadgeText}>
+                  {pet.personalityType === "sociable" ? "🤗 Sociable" :
+                   pet.personalityType === "tranquilo" ? "😌 Tranquilo" :
+                   pet.personalityType === "protector" ? "🛡️ Protector" :
+                   "🎾 Juguetón"}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {pet.size && (
+            <View style={styles.descriptionBlock}>
+              <Text style={styles.descriptionTitle}>Tamaño</Text>
+              <View style={styles.personalityBadge}>
+                <Text style={styles.personalityBadgeText}>
+                  {pet.size === "pequeno" ? "🐣 Pequeño" :
+                   pet.size === "mediano" ? "🐕 Mediano" :
+                   "🦮 Grande"}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {pet.imageUrls && pet.imageUrls.length > 1 && (
+            <View style={styles.descriptionBlock}>
+              <Text style={styles.descriptionTitle}>Más fotos</Text>
+              <View style={styles.moreImagesRow}>
+                {pet.imageUrls.slice(1).map((url, i) => (
+                  <Image key={i} source={{ uri: url }} style={styles.moreImage} resizeMode="cover" />
+                ))}
+              </View>
+            </View>
+          )}
 
           {!isOwner && pet.status === "disponible" && (
             <TouchableOpacity style={styles.adoptBtn} onPress={() => setShowAdoptModal(true)} activeOpacity={0.85}>
@@ -203,6 +264,10 @@ const styles = StyleSheet.create({
   ownerActions: { marginTop: 16 },
   deleteBtn: { backgroundColor: "rgba(220,38,38,0.15)", borderRadius: 14, paddingVertical: 14, alignItems: "center", borderWidth: 1, borderColor: "rgba(220,38,38,0.3)" },
   deleteBtnText: { color: "#ff6b6b", fontWeight: "700" },
+  personalityBadge: { alignSelf: "flex-start", backgroundColor: "rgba(206,189,255,0.15)", borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(206,189,255,0.25)" },
+  personalityBadgeText: { color: "#cebdff", fontSize: 13, fontWeight: "700" },
+  moreImagesRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  moreImage: { width: 90, height: 90, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.05)" },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(19,27,46,0.45)", justifyContent: "center", padding: 24 },
   dialog: { backgroundColor: "rgba(20,14,36,0.97)", borderRadius: 24, padding: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
   dialogTitle: { fontSize: 22, fontWeight: "800", color: "#f4e9ff", marginBottom: 8 },

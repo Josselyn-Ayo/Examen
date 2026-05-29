@@ -2,7 +2,7 @@ import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { supabase } from "../../../../shared/infrastructure/supabase/client";
 import { User, UserRole } from "../../domain/entities/User";
-import { IAuthRepository } from "../../domain/repositories/IAuthRepository";
+import { IAuthRepository, UpdateProfileData } from "../../domain/repositories/IAuthRepository";
 
 const isUserRole = (value: unknown): value is UserRole => value === "adoptante" || value === "refugio";
 const normalizeRole = (value: unknown): UserRole => (isUserRole(value) ? value : "adoptante");
@@ -10,7 +10,7 @@ const normalizeRole = (value: unknown): UserRole => (isUserRole(value) ? value :
 const getWebUrl = () => {
   const url = process.env.EXPO_PUBLIC_WEB_URL
     ? `${process.env.EXPO_PUBLIC_WEB_URL}`
-    : "https://auth-esfot-web-taupe.vercel.app";
+    : "https://mascotas-web-nine.vercel.app";
   return url.replace(/\/+$/, "");
 };
 const fallbackUsername = (email: string) => email.split("@")[0] || "usuario";
@@ -18,6 +18,13 @@ const fallbackUsername = (email: string) => email.split("@")[0] || "usuario";
 type ProfileRow = {
   username?: string | null;
   avatar_url?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  role?: string | null;
+  nit?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  shelter_description?: string | null;
 };
 
 export class SupabaseAuthRepository implements IAuthRepository {
@@ -30,26 +37,7 @@ export class SupabaseAuthRepository implements IAuthRepository {
 
     const storedRole = normalizeRole(data.user.user_metadata?.role);
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("username, avatar_url")
-      .eq("id", data.user.id)
-      .maybeSingle<ProfileRow>();
-
-    if (!profile) {
-      await supabase.from("profiles").insert({
-        id: data.user.id,
-        username: fallbackUsername(data.user.email ?? email),
-      });
-    }
-
-    return {
-      id: data.user.id,
-      email: data.user.email!,
-      username: profile?.username ?? fallbackUsername(data.user.email ?? email),
-      role: storedRole,
-      avatarUrl: profile?.avatar_url ?? undefined,
-    };
+    return this.mapUser(data.user, storedRole);
   }
 
   async loginWithGoogle(): Promise<User> {
@@ -83,28 +71,9 @@ export class SupabaseAuthRepository implements IAuthRepository {
     const currentUser = currentUserResult.user;
     if (!currentUser) throw new Error("No se pudo recuperar el usuario de Google");
 
-    const storedRole = normalizeRole(currentUser.user_metadata?.role);
-
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("username, avatar_url")
-      .eq("id", currentUser.id)
-      .maybeSingle<ProfileRow>();
-
-    if (profileError) throw profileError;
-    if (!profile) {
-      await supabase.from("profiles").insert({
-        id: currentUser.id,
-        username:
-          currentUser.user_metadata?.full_name ??
-          currentUser.user_metadata?.name ??
-          fallbackUsername(currentUser.email ?? "usuario@example.com"),
-      });
-    }
-
+    await this.ensureProfile(currentUser);
     const user = await this.getCurrentUser();
     if (!user) throw new Error("No se pudo recuperar el usuario de Google");
-
     return user;
   }
 
@@ -127,11 +96,15 @@ export class SupabaseAuthRepository implements IAuthRepository {
       },
     });
     if (error) throw error;
-    if (!data.user) throw new Error("No se pudo crear el usuario");
+    if (!data || !data.user) throw new Error("No se pudo crear el usuario");
+
     const { error: profileError } = await supabase
       .from("profiles")
-      .insert({ id: data.user.id, username });
-    if (profileError) throw new Error(profileError.message);
+      .upsert({ id: data.user.id, username, role }, { onConflict: "id" });
+    if (profileError) {
+      console.warn("[register] profile upsert error (non-fatal):", profileError.message);
+    }
+
     return { id: data.user.id, email: data.user.email!, username, role };
   }
 
@@ -159,22 +132,86 @@ export class SupabaseAuthRepository implements IAuthRepository {
     if (error) throw error;
   }
 
+  async updateProfile(data: UpdateProfileData): Promise<User> {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) throw new Error("No hay sesión activa");
+
+    const updateData: Record<string, unknown> = {};
+    if (data.username !== undefined) updateData.username = data.username;
+    if (data.role !== undefined) updateData.role = data.role;
+    if (data.latitude !== undefined) updateData.latitude = data.latitude;
+    if (data.longitude !== undefined) updateData.longitude = data.longitude;
+    if (data.nit !== undefined) updateData.nit = data.nit;
+    if (data.phone !== undefined) updateData.phone = data.phone;
+    if (data.address !== undefined) updateData.address = data.address;
+    if (data.shelterDescription !== undefined) updateData.shelter_description = data.shelterDescription;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update(updateData)
+      .eq("id", authUser.id);
+    if (error) throw error;
+
+    return this.getCurrentUser() as Promise<User>;
+  }
+
   async getCurrentUser(): Promise<User | null> {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return null;
+    return this.mapUser(user);
+  }
+
+  private async ensureProfile(authUser: { id: string; email?: string | null; user_metadata?: { role?: unknown; full_name?: string; name?: string } }) {
+    const { data: existing } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", authUser.id)
+      .maybeSingle();
+    const role = normalizeRole(authUser.user_metadata?.role);
+    if (!existing) {
+      await supabase.from("profiles").insert({
+        id: authUser.id,
+        username:
+          authUser.user_metadata?.full_name ??
+          authUser.user_metadata?.name ??
+          fallbackUsername(authUser.email ?? "usuario@example.com"),
+        role,
+      });
+    } else if (role) {
+      await supabase.from("profiles").update({ role }).eq("id", authUser.id);
+    }
+  }
+
+  private async mapUser(authUser: { id: string; email?: string | null; user_metadata?: { role?: unknown } }, storedRole?: UserRole): Promise<User> {
+    const role = storedRole ?? normalizeRole(authUser.user_metadata?.role);
     const { data: profile } = await supabase
       .from("profiles")
-      .select("username, avatar_url")
-      .eq("id", user.id)
+      .select("username, avatar_url, latitude, longitude, role, nit, phone, address, shelter_description")
+      .eq("id", authUser.id)
       .maybeSingle<ProfileRow>();
+    if (!profile) {
+      await supabase.from("profiles").insert({
+        id: authUser.id,
+        username: fallbackUsername(authUser.email ?? "usuario@example.com"),
+        role,
+      });
+    } else if (!profile.role && role) {
+      await supabase.from("profiles").update({ role }).eq("id", authUser.id);
+    }
     return {
-      id: user.id,
-      email: user.email!,
-      username: profile?.username ?? fallbackUsername(user.email ?? "usuario@example.com"),
-      role: normalizeRole(user.user_metadata?.role),
+      id: authUser.id,
+      email: authUser.email!,
+      username: profile?.username ?? fallbackUsername(authUser.email ?? "usuario@example.com"),
+      role,
       avatarUrl: profile?.avatar_url ?? undefined,
+      latitude: profile?.latitude ?? null,
+      longitude: profile?.longitude ?? null,
+      nit: profile?.nit ?? null,
+      phone: profile?.phone ?? null,
+      address: profile?.address ?? null,
+      shelterDescription: profile?.shelter_description ?? null,
     };
   }
 }

@@ -10,7 +10,7 @@ const createRoomUseCase = new CreateRoomUseCase(chatRepo);
 export function useRooms() {
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
-  const canCreateRooms = user?.role === "refugio";
+  const canCreateRooms = !!user;
 
   // useQuery obtiene la lista de salas y la cachea bajo la clave ['rooms']
   const {
@@ -36,8 +36,8 @@ export function useRooms() {
   });
 
   const createRoom = (name: string, options?: Parameters<typeof createMutation.mutate>[1]) => {
-    if (!canCreateRooms) {
-      throw new Error("Solo el refugio puede crear salas de producto");
+    if (!user) {
+      throw new Error("Debes iniciar sesion para crear una sala");
     }
     createMutation.mutate(name, options);
   };

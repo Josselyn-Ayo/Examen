@@ -32,6 +32,10 @@ export function useAdoptions() {
       createRequestUseCase.execute(petId, user!.id, message),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["adoption-requests-adoptante"] });
+      queryClient.invalidateQueries({ queryKey: ["adoption-requests-shelter"] });
+      queryClient.invalidateQueries({ queryKey: ["pets"] });
+      queryClient.invalidateQueries({ queryKey: ["adopted-pets"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
     },
   });
 
@@ -42,6 +46,8 @@ export function useAdoptions() {
       queryClient.invalidateQueries({ queryKey: ["adoption-requests-shelter"] });
       queryClient.invalidateQueries({ queryKey: ["adoption-requests-adoptante"] });
       queryClient.invalidateQueries({ queryKey: ["pets"] });
+      queryClient.invalidateQueries({ queryKey: ["adopted-pets"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
     },
   });
 

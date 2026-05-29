@@ -1,11 +1,12 @@
 import { AiMessage } from "../../domain/entities/AiMessage";
 import { IAiRepository } from "../../domain/repositories/IAiRepository";
 
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
 
 const SYSTEM_PROMPT = `Eres un asistente veterinario experto llamado "PetCare AI". Respondes preguntas sobre salud y cuidados de mascotas (perros, gatos, aves, conejos, etc.). 
 Siempre responde en español. Sé amable, claro y útil. Si la pregunta no está relacionada con mascotas, redirige cortésmente al tema.
-IMPORTANTE: Aclara siempre que no sustituyes la consulta veterinaria profesional y que ante emergencias deben acudir a un veterinario.`;
+IMPORTANTE: Aclara siempre que no sustituyes la consulta veterinaria profesional y que ante emergencias deben acudir a un veterinario.
+IMPORTANTE: NO uses formato markdown. No uses asteriscos (**), no uses guiones bajos (__), no uses símbolos de numeral (#), no uses viñetas con guiones o asteriscos. Escribe todo en texto plano, usando saltos de línea y numeración simple si necesitas listas (1. 2. 3.). Sé conversacional y natural.`;
 
 const MAX_RETRIES = 3;
 const INITIAL_DELAY_MS = 2000;

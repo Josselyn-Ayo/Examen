@@ -17,13 +17,10 @@ export class RegisterUseCase {
     if (password.length < 6) {
       throw new AuthError('La contraseña debe tener al menos 6 caracteres');
     }
-    if (username.includes(' ')) {
-      throw new AuthError('El username no puede contener espacios');
-    }
     try {
       return await this.authRepo.register(email, password, username, role);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error al registrar usuario';
+      const message = (error as any)?.message ?? String(error);
       throw new AuthError(message, error);
     }
   }

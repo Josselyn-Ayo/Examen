@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { LoginUseCase } from "../../application/use-cases/LoginUseCase";
 import { LoginWithGoogleUseCase } from "../../application/use-cases/LoginWithGoogleUseCase";
@@ -6,6 +6,7 @@ import { RegisterUseCase } from "../../application/use-cases/RegisterUseCase";
 import { ResetPasswordUseCase } from "../../application/use-cases/ResetPasswordUseCase";
 import { ResendConfirmationUseCase } from "../../application/use-cases/ResendConfirmationUseCase";
 import { UserRole } from "../../domain/entities/User";
+import { UpdateProfileData } from "../../domain/repositories/IAuthRepository";
 import { SupabaseAuthRepository } from "../../infrastructure/repositories/SupabaseAuthRepository";
 import { useAuthStore } from "../store/authStore";
 
@@ -22,6 +23,7 @@ const resendConfirmationUseCase = new ResendConfirmationUseCase(authRepo);
 export function useAuth() {
   const { user, setUser } = useAuthStore();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const loginMutation = useMutation({
     mutationFn: ({ email, password }: LoginDto) => loginUseCase.execute(email, password),
@@ -55,6 +57,14 @@ export function useAuth() {
     mutationFn: (email: string) => resendConfirmationUseCase.execute(email),
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: (data: UpdateProfileData) => authRepo.updateProfile(data),
+    onSuccess: (updatedUser) => {
+      setUser(updatedUser);
+      queryClient.invalidateQueries({ queryKey: ["shelters"] });
+    },
+  });
+
   const logout = async () => {
     try {
       await authRepo.logout();
@@ -71,11 +81,13 @@ export function useAuth() {
     loginWithGoogle: googleLoginMutation.mutate,
     resetPassword: resetPasswordMutation.mutate,
     resendConfirmation: resendConfirmationMutation.mutate,
+    updateProfile: updateProfileMutation.mutate,
     logout,
     isLoading:
       loginMutation.isPending || registerMutation.isPending || googleLoginMutation.isPending,
     isResetLoading: resetPasswordMutation.isPending,
     isResendLoading: resendConfirmationMutation.isPending,
+    isUpdateProfileLoading: updateProfileMutation.isPending,
     error:
       loginMutation.error?.message ??
       registerMutation.error?.message ??
@@ -83,6 +95,7 @@ export function useAuth() {
       null,
     resetError: resetPasswordMutation.error?.message ?? null,
     resendError: resendConfirmationMutation.error?.message ?? null,
+    updateProfileError: updateProfileMutation.error?.message ?? null,
     resetSuccess: resetPasswordMutation.isSuccess,
     resendSuccess: resendConfirmationMutation.isSuccess,
   };

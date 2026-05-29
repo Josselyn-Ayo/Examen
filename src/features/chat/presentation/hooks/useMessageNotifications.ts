@@ -1,6 +1,6 @@
 import { useAuthStore } from "@features/auth/presentation/store/authStore";
 import { supabase } from "@shared/infrastructure/supabase/client";
-import * as Notifications from "expo-notifications";
+import { isRunningInExpoGo } from "expo";
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 
@@ -9,49 +9,63 @@ const CHAT_NOTIFICATION_CHANNEL_ID = "chat-messages";
 let messageNotificationsChannel: ReturnType<typeof supabase.channel> | null = null;
 let subscribedUserId: string | null = null;
 let setupPromise: Promise<void> | null = null;
+let notificationHandlerSetup = false;
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+async function ensureNotificationHandlerAsync() {
+  if (notificationHandlerSetup) return;
+  try {
+    const Notif = await import('expo-notifications');
+    await Notif.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+    notificationHandlerSetup = true;
+  } catch {}
+}
 
 async function ensureNotificationChannelAsync() {
   if (Platform.OS !== "android") return;
-
-  await Notifications.setNotificationChannelAsync(CHAT_NOTIFICATION_CHANNEL_ID, {
-    name: "Mensajes de chat",
-    description: "Notificaciones de mensajes nuevos en salas de chat",
-    importance: Notifications.AndroidImportance.HIGH,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: "#4338ca",
-    showBadge: true,
-  });
+  try {
+    const Notif = await import('expo-notifications');
+    await Notif.setNotificationChannelAsync(CHAT_NOTIFICATION_CHANNEL_ID, {
+      name: "Mensajes de chat",
+      description: "Notificaciones de mensajes nuevos en salas de chat",
+      importance: Notif.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#4338ca",
+      showBadge: true,
+    });
+  } catch {}
 }
 
 async function requestNotificationPermissionsAsync() {
-  const currentPermissions = await Notifications.getPermissionsAsync();
-  const granted =
-    currentPermissions.granted ||
-    currentPermissions.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+  try {
+    const Notif = await import('expo-notifications');
+    const currentPermissions = await Notif.getPermissionsAsync();
+    const granted =
+      currentPermissions.granted ||
+      currentPermissions.ios?.status === Notif.IosAuthorizationStatus.PROVISIONAL;
+    if (granted) return true;
 
-  if (granted) return true;
+    const requestedPermissions = await Notif.requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
+    });
 
-  const requestedPermissions = await Notifications.requestPermissionsAsync({
-    ios: {
-      allowAlert: true,
-      allowBadge: true,
-      allowSound: true,
-    },
-  });
-
-  return (
-    requestedPermissions.granted ||
-    requestedPermissions.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
-  );
+    return (
+      requestedPermissions.granted ||
+      requestedPermissions.ios?.status === Notif.IosAuthorizationStatus.PROVISIONAL
+    );
+  } catch {
+    return false;
+  }
 }
 
 function buildMessagePreview(content: string) {
@@ -69,6 +83,8 @@ export function useMessageNotifications(activeRoomId: string | null) {
   }, [activeRoomId]);
 
   useEffect(() => {
+    if (isRunningInExpoGo()) return;
+
     let cancelled = false;
 
     const start = async () => {
@@ -81,17 +97,18 @@ export function useMessageNotifications(activeRoomId: string | null) {
 
       setupPromise = (async () => {
         try {
-          const granted = await requestNotificationPermissionsAsync();
+          await ensureNotificationHandlerAsync();
+          const granted = await requestNotificationPermissionsAsync().catch(() => false);
           if (!granted || cancelled) return;
 
-          await ensureNotificationChannelAsync();
+          await ensureNotificationChannelAsync().catch(() => {});
 
           if (subscribedUserId === user.id && messageNotificationsChannel) {
             return;
           }
 
           if (messageNotificationsChannel) {
-            await supabase.removeChannel(messageNotificationsChannel);
+            await supabase.removeChannel(messageNotificationsChannel).catch(() => {});
             messageNotificationsChannel = null;
             subscribedUserId = null;
           }
@@ -106,46 +123,54 @@ export function useMessageNotifications(activeRoomId: string | null) {
               table: "messages",
             },
             async (payload) => {
-              const message = payload.new as {
-                id: string;
-                room_id: string;
-                user_id: string;
-                content: string;
-                image_url?: string | null;
-                created_at: string;
-              };
+              try {
+                const message = payload.new as {
+                  id: string;
+                  room_id: string;
+                  user_id: string;
+                  content: string;
+                  image_url?: string | null;
+                  created_at: string;
+                };
 
-              if (!message || message.user_id === user.id) return;
-              if (activeRoomIdRef.current && message.room_id === activeRoomIdRef.current) return;
+                if (!message || message.user_id === user.id) return;
+                if (activeRoomIdRef.current && message.room_id === activeRoomIdRef.current) return;
 
-              const [{ data: room }, { data: profile }] = await Promise.all([
-                supabase.from("rooms").select("name").eq("id", message.room_id).single(),
-                supabase.from("profiles").select("username").eq("id", message.user_id).single(),
-              ]);
+                const [{ data: room }, { data: profile }] = await Promise.all([
+                  supabase.from("rooms").select("name").eq("id", message.room_id).single(),
+                  supabase.from("profiles").select("username").eq("id", message.user_id).single(),
+                ]);
 
-              const roomName = room?.name ?? "Chat";
-              const authorName = profile?.username ?? "Alguien";
-              const preview = buildMessagePreview(message.content || (message.image_url ? "Imagen" : "Nuevo mensaje"));
+                const roomName = room?.name ?? "Chat";
+                const authorName = profile?.username ?? "Alguien";
+                const preview = buildMessagePreview(message.content || (message.image_url ? "Imagen" : "Nuevo mensaje"));
 
-              await Notifications.scheduleNotificationAsync({
-                content: {
-                  title: `Nuevo mensaje en ${roomName}`,
-                  body: `${authorName}: ${preview}`,
-                  data: {
-                    roomId: message.room_id,
-                    messageId: message.id,
-                  },
-                  sound: "default",
-                  channelId: CHAT_NOTIFICATION_CHANNEL_ID,
-                },
-                trigger: null,
-              });
+                try {
+                  const Notif = await import('expo-notifications');
+                  await Notif.scheduleNotificationAsync({
+                    content: {
+                      title: `Nuevo mensaje en ${roomName}`,
+                      body: `${authorName}: ${preview}`,
+                      data: {
+                        roomId: message.room_id,
+                        messageId: message.id,
+                      },
+                      sound: "default",
+                    },
+                    trigger: {
+                      type: Notif.SchedulableTriggerInputTypes.TIME_INTERVAL,
+                      seconds: 1,
+                      channelId: CHAT_NOTIFICATION_CHANNEL_ID,
+                    },
+                  });
+                } catch {}
+              } catch {}
             },
           );
 
           messageNotificationsChannel = channel.subscribe();
           subscribedUserId = user.id;
-        } finally {
+        } catch {} finally {
           setupPromise = null;
         }
       })();

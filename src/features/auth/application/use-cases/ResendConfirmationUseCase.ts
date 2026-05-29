@@ -11,7 +11,7 @@ export class ResendConfirmationUseCase {
     try {
       await this.authRepo.resendConfirmation(email);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Error al reenviar la confirmación";
+      const message = (error as any)?.message ?? String(error);
       throw new AuthError(message, error);
     }
   }

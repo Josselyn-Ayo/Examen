@@ -50,7 +50,7 @@ export default function ForgotPasswordScreen() {
                 <Text style={styles.successTitle}>¡Email enviado!</Text>
                 <Text style={styles.successText}>
                   Revisa tu bandeja de entrada y sigue el enlace para crear una nueva contraseña.
-                  El link te llevará a la web de confirmación.
+                  El enlace abrirá la aplicación para que puedas restablecerla.
                 </Text>
               </View>
             ) : (

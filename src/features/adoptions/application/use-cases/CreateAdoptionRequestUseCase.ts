@@ -9,7 +9,7 @@ export class CreateAdoptionRequestUseCase {
     try {
       return await this.adoptionRepo.createRequest(petId, adoptanteId, message);
     } catch (error) {
-      throw new AppError("ADOPTION_ERROR", error instanceof Error ? error.message : "Error al enviar solicitud", error);
+      throw new AppError("ADOPTION_ERROR", (error as any)?.message ?? String(error), error);
     }
   }
 }

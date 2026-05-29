@@ -6,27 +6,27 @@ export class SupabaseAdoptionRepository implements IAdoptionRepository {
   async getRequestsForShelter(refugioId: string): Promise<AdoptionRequest[]> {
     const { data, error } = await supabase
       .from("adoption_requests")
-      .select("id, pet_id, adoptante_id, refugio_id, status, message, created_at, updated_at, pets(name), profiles(username)")
+      .select("id, pet_id, adoptante_id, refugio_id, status, message, created_at, updated_at")
       .eq("refugio_id", refugioId)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return (data ?? []).map(this.mapForShelter);
+    return Promise.all((data ?? []).map((r) => this.enrich(r)));
   }
 
   async getRequestsForAdoptante(adoptanteId: string): Promise<AdoptionRequest[]> {
     const { data, error } = await supabase
       .from("adoption_requests")
-      .select("id, pet_id, adoptante_id, refugio_id, status, message, created_at, updated_at, pets(name), profiles(username)")
+      .select("id, pet_id, adoptante_id, refugio_id, status, message, created_at, updated_at")
       .eq("adoptante_id", adoptanteId)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return (data ?? []).map(this.mapForAdoptante);
+    return Promise.all((data ?? []).map((r) => this.enrich(r)));
   }
 
   async createRequest(petId: string, adoptanteId: string, message: string): Promise<AdoptionRequest> {
     const { data: petData } = await supabase
       .from("pets")
-      .select("shelter_id")
+      .select("shelter_id, name")
       .eq("id", petId)
       .single();
     const refugioId = petData?.shelter_id;
@@ -47,7 +47,7 @@ export class SupabaseAdoptionRepository implements IAdoptionRepository {
     return {
       id: data.id,
       petId: data.pet_id,
-      petName: null,
+      petName: petData?.name ?? null,
       adoptanteId: data.adoptante_id,
       adoptanteName: null,
       refugioId: data.refugio_id,
@@ -63,35 +63,37 @@ export class SupabaseAdoptionRepository implements IAdoptionRepository {
       .from("adoption_requests")
       .update({ status })
       .eq("id", requestId)
-      .select("id, pet_id, adoptante_id, refugio_id, status, message, created_at, updated_at, pets(name), profiles(username)")
+      .select("id, pet_id, adoptante_id, refugio_id, status, message, created_at, updated_at")
       .single();
     if (error) throw error;
-    return this.mapForShelter(data);
+
+    if (status === "aprobada") {
+      const { error: petError } = await supabase
+        .from("pets")
+        .update({ status: "adoptado" })
+        .eq("id", data.pet_id);
+      if (petError) console.warn("[adoption] pet status update error:", petError.message);
+    }
+
+    return this.enrich(data);
   }
 
-  private mapForShelter = (raw: any): AdoptionRequest => ({
-    id: raw.id,
-    petId: raw.pet_id,
-    petName: raw.pets?.name ?? null,
-    adoptanteId: raw.adoptante_id,
-    adoptanteName: raw.profiles?.username ?? null,
-    refugioId: raw.refugio_id,
-    status: raw.status as AdoptionStatus,
-    message: raw.message ?? "",
-    createdAt: new Date(raw.created_at),
-    updatedAt: new Date(raw.updated_at ?? raw.created_at),
-  });
-
-  private mapForAdoptante = (raw: any): AdoptionRequest => ({
-    id: raw.id,
-    petId: raw.pet_id,
-    petName: raw.pets?.name ?? null,
-    adoptanteId: raw.adoptante_id,
-    adoptanteName: null,
-    refugioId: raw.refugio_id,
-    status: raw.status as AdoptionStatus,
-    message: raw.message ?? "",
-    createdAt: new Date(raw.created_at),
-    updatedAt: new Date(raw.updated_at ?? raw.created_at),
-  });
+  private async enrich(raw: any): Promise<AdoptionRequest> {
+    const [{ data: pet }, { data: profile }] = await Promise.all([
+      supabase.from("pets").select("name").eq("id", raw.pet_id).maybeSingle(),
+      supabase.from("profiles").select("username").eq("id", raw.adoptante_id).maybeSingle(),
+    ]);
+    return {
+      id: raw.id,
+      petId: raw.pet_id,
+      petName: pet?.name ?? null,
+      adoptanteId: raw.adoptante_id,
+      adoptanteName: profile?.username ?? null,
+      refugioId: raw.refugio_id,
+      status: raw.status as AdoptionStatus,
+      message: raw.message ?? "",
+      createdAt: new Date(raw.created_at),
+      updatedAt: new Date(raw.updated_at ?? raw.created_at),
+    };
+  }
 }

@@ -30,11 +30,19 @@ export function usePets() {
     enabled: !!user && user.role === "refugio",
   });
 
+  const { data: adoptedPets = [], isLoading: isLoadingAdopted } = useQuery({
+    queryKey: ["adopted-pets", user?.id],
+    queryFn: () => petRepo.getPetsByAdoptante(user!.id),
+    enabled: !!user && user.role !== "refugio",
+  });
+
   const createMutation = useMutation({
     mutationFn: (input: CreatePetInput) => createPetUseCase.execute(user!.id, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pets"] });
       queryClient.invalidateQueries({ queryKey: ["my-pets"] });
+      queryClient.invalidateQueries({ queryKey: ["adopted-pets"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
     },
   });
 
@@ -46,6 +54,8 @@ export function usePets() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pets"] });
       queryClient.invalidateQueries({ queryKey: ["my-pets"] });
+      queryClient.invalidateQueries({ queryKey: ["adopted-pets"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
     },
   });
 
@@ -54,14 +64,18 @@ export function usePets() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pets"] });
       queryClient.invalidateQueries({ queryKey: ["my-pets"] });
+      queryClient.invalidateQueries({ queryKey: ["adopted-pets"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
     },
   });
 
   return {
     pets,
     myPets,
+    adoptedPets,
     isLoading,
     isLoadingMyPets,
+    isLoadingAdopted,
     error: error?.message ?? null,
     refetch,
     createPet: createMutation.mutate,

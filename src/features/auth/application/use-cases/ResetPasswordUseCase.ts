@@ -11,7 +11,7 @@ export class ResetPasswordUseCase {
     try {
       await this.authRepo.resetPassword(email);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Error al enviar el email de recuperación";
+      const message = (error as any)?.message ?? String(error);
       throw new AuthError(message, error);
     }
   }

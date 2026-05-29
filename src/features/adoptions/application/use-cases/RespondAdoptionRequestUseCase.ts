@@ -12,7 +12,7 @@ export class RespondAdoptionRequestUseCase {
     try {
       return await this.adoptionRepo.respondRequest(requestId, status);
     } catch (error) {
-      throw new AppError("ADOPTION_ERROR", error instanceof Error ? error.message : "Error al responder solicitud", error);
+      throw new AppError("ADOPTION_ERROR", (error as any)?.message ?? String(error), error);
     }
   }
 }

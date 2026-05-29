@@ -1,4 +1,5 @@
 import { useAuthStore } from "@features/auth/presentation/store/authStore";
+import { supabase } from "@shared/infrastructure/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import * as Location from "expo-location";
 
@@ -8,20 +9,19 @@ export interface ShelterLocation {
   username: string;
   latitude: number | null;
   longitude: number | null;
-  email: string;
 }
 
 export function useShelters() {
   const user = useAuthStore((s) => s.user);
 
-  const { data: shelters = [], isLoading: isLoadingShelters } = useQuery({
+  const { data: shelters = [], isLoading: isLoadingShelters, error } = useQuery({
     queryKey: ["shelters"],
     queryFn: async () => {
-      const { supabase } = await import("@shared/infrastructure/supabase/client");
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, username, latitude, longitude, email")
-        .eq("role", "refugio");
+        .select("id, username, latitude, longitude")
+        .not("latitude", "is", null)
+        .not("longitude", "is", null);
       if (error) throw error;
       return (data ?? []).map((s: any): ShelterLocation => ({
         id: s.id,
@@ -29,7 +29,6 @@ export function useShelters() {
         username: s.username ?? "",
         latitude: s.latitude ?? null,
         longitude: s.longitude ?? null,
-        email: s.email ?? "",
       }));
     },
     enabled: !!user,
@@ -37,7 +36,7 @@ export function useShelters() {
 
   const sheltersWithLocation = shelters.filter((s) => s.latitude !== null && s.longitude !== null);
 
-  return { shelters, sheltersWithLocation, isLoadingShelters };
+  return { shelters, sheltersWithLocation, isLoadingShelters, error };
 }
 
 export function useCurrentLocation() {

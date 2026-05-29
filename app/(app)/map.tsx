@@ -1,111 +1,211 @@
-import { useShelters, useCurrentLocation } from "@features/map/presentation/hooks/useShelters";
+import { useShelters, useCurrentLocation, ShelterLocation } from "@features/map/presentation/hooks/useShelters";
+import { useAuthStore } from "@features/auth/presentation/store/authStore";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
-  Linking,
-  SafeAreaView,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
+import WebView from "react-native-webview";
+import LottieView from "lottie-react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
+import catFace from "../../assets/animations/cat_face.json";
+import catPaw from "../../assets/animations/cat_paw.json";
+import mapMarker from "../../assets/animations/map_marker.json";
+import pawWalk from "../../assets/animations/paw_walk.json";
+
+const ACCENT_COLORS = ["#4FC3F7", "#7C4DFF", "#81C784", "#FFB74D", "#F06292"];
+
+function generateMapHtml(shelters: { name: string; latitude: number; longitude: number }[], userLat: number | null, userLng: number | null) {
+  const markers = shelters
+    .map(
+      (s, i) =>
+        `L.marker([${s.latitude}, ${s.longitude}], {icon: L.divIcon({className:'',html:'<div style="background:#${ACCENT_COLORS[i % ACCENT_COLORS.length].slice(1)};width:24px;height:24px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:800">${i + 1}</div>',iconSize:[24,24],iconAnchor:[12,12]})}).addTo(map).bindPopup('<b>${s.name.replace(/'/g, "\\'")}</b>');`
+    )
+    .join("\n");
+
+  const userMarker =
+    userLat !== null && userLng !== null
+      ? `L.marker([${userLat}, ${userLng}], {icon: L.divIcon({className:'',html:'<div style="background:#7c4dff;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map).bindPopup('<b>Tu ubicación</b>');`
+      : "";
+
+  const centerLat = userLat ?? -0.18;
+  const centerLng = userLng ?? -78.46;
+  const bounds =
+    shelters.length > 0
+      ? `map.fitBounds([${shelters.map((s) => `[${s.latitude}, ${s.longitude}]`).join(",")}], { padding: [60, 60] });`
+      : `map.setView([${centerLat}, ${centerLng}], 13);`;
+
+  return `<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>html,body,#map{margin:0;padding:0;height:100%;width:100%;}</style>
+</head><body>
+<div id="map"></div>
+<script>
+var map = L.map('map');
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OSM contributors',
+  maxZoom: 19
+}).addTo(map);
+${markers}
+${userMarker}
+${bounds}
+var routeLine = null;
+var routeEnd = null;
+function showRoute(fromLat, fromLng, toLat, toLng, label) {
+  if (routeLine) map.removeLayer(routeLine);
+  if (routeEnd) map.removeLayer(routeEnd);
+  routeLine = L.polyline([[fromLat, fromLng], [toLat, toLng]], {color: '#7C4DFF', weight: 4, opacity: 0.8, dashArray: '10, 10'}).addTo(map);
+  routeEnd = L.marker([toLat, toLng], {icon: L.divIcon({className:'',html:'<div style="background:#F06292;width:28px;height:28px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:14px">📍</div>',iconSize:[28,28],iconAnchor:[14,14]})}).addTo(map).bindPopup('<b>' + label + '</b><br/><i>Destino</i>');
+  map.fitBounds([[fromLat, fromLng], [toLat, toLng]], {padding: [60, 60]});
+}
+function clearRoute() {
+  if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+  if (routeEnd) { map.removeLayer(routeEnd); routeEnd = null; }
+  if (${shelters.length > 0}) { map.fitBounds([${shelters.map((s) => `[${s.latitude}, ${s.longitude}]`).join(",")}], { padding: [60, 60] }); }
+}
+</script>
+</body></html>`;
+}
 
 export default function MapScreen() {
-  const { shelters, sheltersWithLocation, isLoadingShelters } = useShelters();
-  const { latitude, longitude, isLoading: isLoadingLocation, error: locationError } = useCurrentLocation();
+  const user = useAuthStore((s) => s.user);
+  const { sheltersWithLocation, isLoadingShelters, error: sheltersError } = useShelters();
+  const { latitude, longitude, isLoading: isLoadingLocation } = useCurrentLocation();
+  const isRefugio = user?.role === "refugio";
+  const [routeShelter, setRouteShelter] = useState<ShelterLocation | null>(null);
+  const webViewRef = useRef<WebView>(null);
 
-  const openInMaps = (lat: number, lng: number, name: string) => {
-    const url = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`;
-    Linking.openURL(url);
-  };
+  const sheltersOnMap = sheltersWithLocation.map((s) => ({
+    name: s.name,
+    latitude: s.latitude!,
+    longitude: s.longitude!,
+  }));
 
-  const openDirections = (destLat: number, destLng: number) => {
-    if (latitude && longitude) {
-      const url = `https://www.openstreetmap.org/directions?from=${latitude},${longitude}&to=${destLat},${destLng}`;
-      Linking.openURL(url);
-    } else {
-      openInMaps(destLat, destLng, "");
+  const mapHtml = generateMapHtml(sheltersOnMap, latitude, longitude);
+  const isMapReady = !isLoadingShelters && !isLoadingLocation;
+
+  const handleRoute = (shelter: ShelterLocation) => {
+    if (routeShelter?.id === shelter.id) {
+      setRouteShelter(null);
+      webViewRef.current?.injectJavaScript("clearRoute(); true;");
+    } else if (latitude !== null && longitude !== null) {
+      setRouteShelter(shelter);
+      webViewRef.current?.injectJavaScript(
+        `showRoute(${latitude}, ${longitude}, ${shelter.latitude}, ${shelter.longitude}, '${shelter.name.replace(/'/g, "\\'")}'); true;`
+      );
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.bgMesh} />
-      <View style={styles.blobOne} />
-
-      <View style={styles.header}>
-        <Text style={styles.title}>🗺️ Refugios</Text>
-        <Text style={styles.subtitle}>
-          {latitude ? "Ubicación detectada" : "Encuentra refugios cercanos"}
-        </Text>
-      </View>
-
-      <View style={styles.mapPlaceholder}>
-        <Text style={styles.mapEmoji}>🌍</Text>
-        <Text style={styles.mapTitle}>Mapa de refugios</Text>
-        <Text style={styles.mapSub}>
-          {sheltersWithLocation.length > 0
-            ? `${sheltersWithLocation.length} refugio${sheltersWithLocation.length > 1 ? "s" : ""} con ubicación`
-            : "Aún no hay refugios con ubicación registrada"}
-        </Text>
-        {isLoadingLocation && <ActivityIndicator size="small" color="#cebdff" style={{ marginTop: 8 }} />}
-        {!isLoadingLocation && latitude && (
-          <Text style={styles.locationText}>
-            Tu ubicación: {latitude.toFixed(4)}, {longitude!.toFixed(4)}
-          </Text>
-        )}
-      </View>
-
-      {isLoadingShelters ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#cebdff" />
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <View style={styles.headerDecor1} />
+          <View style={styles.headerDecor2} />
+          <View style={styles.headerRow}>
+            <LottieView source={catFace} autoPlay loop style={styles.headerLottie} />
+            <View style={styles.headerTextWrap}>
+              <Text style={styles.title}>Refugios</Text>
+              <Text style={styles.subtitle}>
+                {sheltersWithLocation.length > 0
+                  ? `${sheltersWithLocation.length} refugio${sheltersWithLocation.length > 1 ? "s" : ""} en el mapa`
+                  : isRefugio
+                    ? "Registra tu ubicación en Perfil para aparecer en el mapa"
+                    : "Aún no hay refugios con ubicación"}
+              </Text>
+            </View>
+          </View>
         </View>
-      ) : (
-        <FlatList
-          data={shelters}
-          keyExtractor={(s) => s.id}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>🏠</Text>
-              <Text style={styles.emptyTitle}>Sin refugios</Text>
-              <Text style={styles.emptyText}>No hay refugios registrados aún.</Text>
+
+        {isMapReady ? (
+          <View style={styles.mapContainer}>
+            <View style={styles.mapBadge}>
+              <LottieView source={mapMarker} autoPlay loop style={styles.badgeLottie} />
+              <Text style={styles.mapBadgeText}>Mapa en vivo</Text>
             </View>
-          }
-          renderItem={({ item }) => (
-            <View style={styles.shelterCard}>
-              <View style={styles.shelterInfo}>
-                <Text style={styles.shelterName}>{item.name}</Text>
-                <Text style={styles.shelterEmail}>{item.email}</Text>
-                {item.latitude && item.longitude ? (
-                  <Text style={styles.shelterCoords}>
-                    📍 {item.latitude.toFixed(4)}, {item.longitude!.toFixed(4)}
-                  </Text>
-                ) : (
-                  <Text style={styles.shelterNoCoords}>Sin ubicación registrada</Text>
-                )}
-              </View>
-              {item.latitude && item.longitude ? (
-                <View style={styles.shelterActions}>
-                  <TouchableOpacity
-                    style={styles.mapBtn}
-                    onPress={() => openInMaps(item.latitude!, item.longitude!, item.name)}
-                  >
-                    <Text style={styles.mapBtnText}>🗺️ Ver</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.dirBtn}
-                    onPress={() => openDirections(item.latitude!, item.longitude!)}
-                  >
-                    <Text style={styles.dirBtnText}>🧭 Ir</Text>
-                  </TouchableOpacity>
+            <WebView
+              ref={webViewRef}
+              source={{ html: mapHtml }}
+              style={styles.map}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={styles.mapLoading}>
+                  <LottieView source={pawWalk} autoPlay loop style={styles.webviewLoadingLottie} />
+                  <Text style={styles.loadingText}>Cargando mapa...</Text>
                 </View>
-              ) : null}
+              )}
+            />
+          </View>
+        ) : (
+          <View style={styles.mapLoading}>
+            <LottieView source={pawWalk} autoPlay loop style={styles.loadingLottie} />
+            <Text style={styles.loadingText}>Cargando mapa...</Text>
+          </View>
+        )}
+
+        <View style={styles.listSection}>
+          <View style={styles.listHeaderRow}>
+            <LottieView source={catPaw} autoPlay loop style={styles.listLottie} />
+            <View style={styles.listAccentBar} />
+            <Text style={styles.listTitle}>
+              {isRefugio ? "Todos los refugios" : "Refugios disponibles"}
+            </Text>
+          </View>
+
+          {isLoadingShelters ? (
+            <ActivityIndicator size="small" color="#7C4DFF" />
+          ) : sheltersError ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>Error al cargar refugios</Text>
+              <Text style={styles.emptyText}>{(sheltersError as any)?.message ?? String(sheltersError)}</Text>
             </View>
+          ) : sheltersWithLocation.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <LottieView source={catFace} autoPlay loop style={styles.emptyLottie} />
+              <Text style={styles.emptyText}>
+                {isRefugio
+                  ? "Registra tu ubicación en Perfil para aparecer aquí."
+                  : "No hay refugios con ubicación registrada aún."}
+              </Text>
+            </View>
+          ) : (
+            sheltersWithLocation.slice(0, 5).map((shelter, index) => {
+              const isActive = routeShelter?.id === shelter.id;
+              return (
+                <View key={shelter.id} style={[styles.shelterCard, isActive && styles.shelterCardActive, { borderLeftColor: ACCENT_COLORS[index % ACCENT_COLORS.length] }]}>
+                  <View style={styles.shelterInfo}>
+                    <View style={styles.shelterNameRow}>
+                      <View style={[styles.shelterDot, { backgroundColor: ACCENT_COLORS[index % ACCENT_COLORS.length] }]} />
+                      <Text style={styles.shelterName}>{shelter.name}</Text>
+                    </View>
+                    <Text style={styles.shelterCoords}>
+                      📍 {shelter.latitude!.toFixed(4)}, {shelter.longitude!.toFixed(4)}
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={[styles.routeBtn, isActive && styles.routeBtnActive]}
+                    onPress={() => handleRoute(shelter)}
+                  >
+                    <Text style={[styles.routeBtnText, isActive && styles.routeBtnTextActive]}>
+                      {isActive ? "✕ Ruta" : "🧭 Ir"}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })
           )}
-        />
-      )}
+        </View>
+      </ScrollView>
 
       <BottomNav active="map" />
     </SafeAreaView>
@@ -113,40 +213,144 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#0c0e12" },
-  bgMesh: { ...StyleSheet.absoluteFillObject, backgroundColor: "#0c0e12" },
-  blobOne: { position: "absolute", top: -80, right: -100, width: 320, height: 320, borderRadius: 999, backgroundColor: "rgba(80,40,174,0.12)" },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12 },
-  title: { fontSize: 28, fontWeight: "800", color: "#fff" },
-  subtitle: { color: "rgba(226,226,231,0.7)", fontSize: 13, fontWeight: "600", marginTop: 4 },
-  mapPlaceholder: { marginHorizontal: 20, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", padding: 24, alignItems: "center", marginBottom: 16 },
-  mapEmoji: { fontSize: 48, marginBottom: 8 },
-  mapTitle: { color: "#f4e9ff", fontSize: 18, fontWeight: "800", marginBottom: 4 },
-  mapSub: { color: "rgba(244,233,255,0.6)", fontSize: 14, textAlign: "center" },
-  locationText: { color: "rgba(244,233,255,0.5)", fontSize: 12, marginTop: 8 },
-  listContent: { paddingHorizontal: 20, paddingBottom: 140 },
-  shelterCard: { backgroundColor: "rgba(255,255,255,0.045)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", borderRadius: 20, padding: 16, marginBottom: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  safeArea: { flex: 1, backgroundColor: "#E8F4FD" },
+  scrollContent: { paddingBottom: 90 },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 12,
+    backgroundColor: "#B3E5FC",
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: "hidden",
+    position: "relative",
+  },
+  headerRow: { flexDirection: "row", alignItems: "center" },
+  headerLottie: { width: 64, height: 64, marginRight: 10 },
+  headerTextWrap: { flex: 1 },
+  headerDecor1: {
+    position: "absolute",
+    top: -30,
+    right: -20,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(124,77,255,0.12)",
+  },
+  headerDecor2: {
+    position: "absolute",
+    bottom: -20,
+    left: 40,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "rgba(79,195,247,0.18)",
+  },
+  title: { fontSize: 28, fontWeight: "800", color: "#1A237E" },
+  subtitle: { color: "#3949AB", fontSize: 13, fontWeight: "600", marginTop: 4, lineHeight: 18 },
+  mapContainer: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: "#fff",
+    elevation: 6,
+    shadowColor: "#7C4DFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    position: "relative",
+  },
+  mapBadge: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  badgeLottie: { width: 20, height: 20, marginRight: 4 },
+  mapBadgeText: { fontSize: 11, fontWeight: "700", color: "#1A237E" },
+  map: { flex: 1, minHeight: 300 },
+  mapLoading: { flex: 1, justifyContent: "center", alignItems: "center", minHeight: 300 },
+  webviewLoadingLottie: { width: 80, height: 80 },
+  loadingLottie: { width: 100, height: 100 },
+  loadingText: { color: "#7C4DFF", fontSize: 13, marginTop: 8, fontWeight: "600" },
+  listSection: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 8 },
+  listHeaderRow: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
+  listLottie: { width: 32, height: 32, marginRight: 4 },
+  listAccentBar: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: "#7C4DFF",
+    marginRight: 8,
+  },
+  listTitle: {
+    color: "#3949AB",
+    fontSize: 12,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    fontWeight: "800",
+  },
+  emptyCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 24,
+    alignItems: "center",
+    elevation: 3,
+    shadowColor: "#4FC3F7",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+  },
+  emptyLottie: { width: 120, height: 120, marginBottom: 8 },
+  emptyText: { color: "#5C6BC0", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  emptyTitle: { color: "#1A237E", fontSize: 16, fontWeight: "700", marginBottom: 6 },
+  shelterCard: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(79,195,247,0.15)",
+    borderLeftWidth: 4,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    elevation: 2,
+    shadowColor: "#4FC3F7",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+  },
   shelterInfo: { flex: 1 },
-  shelterName: { color: "#f4e9ff", fontSize: 16, fontWeight: "700", marginBottom: 3 },
-  shelterEmail: { color: "rgba(244,233,255,0.5)", fontSize: 13, marginBottom: 2 },
-  shelterCoords: { color: "#cebdff", fontSize: 12, fontWeight: "600" },
-  shelterNoCoords: { color: "rgba(244,233,255,0.35)", fontSize: 12 },
-  shelterActions: { flexDirection: "row", gap: 8 },
-  mapBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" },
-  mapBtnText: { color: "#cebdff", fontSize: 13, fontWeight: "700" },
-  dirBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: "#7c4dff" },
-  dirBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  emptyState: { alignItems: "center", paddingTop: 40 },
-  emptyIcon: { fontSize: 48, marginBottom: 10 },
-  emptyTitle: { color: "#fff", fontSize: 20, fontWeight: "800", marginBottom: 6 },
-  emptyText: { color: "rgba(226,226,231,0.72)", fontSize: 15, textAlign: "center" },
-  bottomNav: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 20, backgroundColor: "rgba(12,14,18,0.9)", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.05)" },
-  bottomNavInner: { flexDirection: "row", justifyContent: "space-around", alignItems: "center", backgroundColor: "rgba(255,255,255,0.03)", borderRadius: 26, paddingVertical: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)" },
-  navItem: { flexDirection: "column", alignItems: "center", paddingHorizontal: 12, paddingVertical: 6 },
-  navItemActive: { backgroundColor: "rgba(206,189,255,0.12)", borderRadius: 16, paddingHorizontal: 16 },
-  navIcon: { fontSize: 18, color: "rgba(226,226,231,0.62)" },
-  navIconActive: { fontSize: 18, color: "#cebdff", fontWeight: "800" },
-  navLabel: { fontSize: 10, color: "rgba(226,226,231,0.62)", marginTop: 3, fontWeight: "700" },
-  navLabelActive: { fontSize: 10, color: "#cebdff", marginTop: 3, fontWeight: "800" },
+  shelterNameRow: { flexDirection: "row", alignItems: "center", marginBottom: 3 },
+  shelterDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  shelterName: { color: "#1A237E", fontSize: 15, fontWeight: "700" },
+  shelterCoords: { color: "#7986CB", fontSize: 12, marginLeft: 16 },
+  shelterCardActive: { backgroundColor: "#EDE7F6", borderWidth: 1.5, borderColor: "#7C4DFF" },
+  routeBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 14,
+    backgroundColor: "#B3E5FC",
+    shadowColor: "#4FC3F7",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  routeBtnActive: { backgroundColor: "#7C4DFF" },
+  routeBtnText: { color: "#1A237E", fontSize: 13, fontWeight: "700" },
+  routeBtnTextActive: { color: "#fff" },
 });

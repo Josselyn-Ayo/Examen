@@ -39,7 +39,7 @@ export default function CheckEmailScreen() {
               <Text style={styles.icon}>📧</Text>
               <Text style={styles.title}>Verifica tu email</Text>
               <Text style={styles.subtitle}>
-                Te hemos enviado un enlace de confirmación. Revisa tu bandeja de entrada y haz clic en el enlace para activar tu cuenta.
+                Te hemos enviado un enlace de confirmación. Revisa tu bandeja de entrada y haz clic en el enlace para activar tu cuenta. El enlace abrirá la aplicación automáticamente.
               </Text>
             </View>
 

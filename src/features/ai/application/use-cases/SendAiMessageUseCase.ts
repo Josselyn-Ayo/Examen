@@ -10,7 +10,7 @@ export class SendAiMessageUseCase {
     try {
       return await this.aiRepo.sendMessage(conversationHistory, userMessage);
     } catch (error) {
-      throw new AppError("AI_ERROR", error instanceof Error ? error.message : "Error al comunicarse con el asistente", error);
+      throw new AppError("AI_ERROR", (error as any)?.message ?? String(error), error);
     }
   }
 }

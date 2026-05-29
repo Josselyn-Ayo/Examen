@@ -86,7 +86,7 @@ export default function LoginScreen() {
 
             <Animated.View style={[styles.dogWrap, { transform: [{ translateY: Animated.add(slideDog, dogFloatY) }, { scale: breatheScale }] }]}>
               <View style={styles.dogShadow} />
-              <Image source={require("../../assets/images/Perrito.png")} style={styles.dogImage} resizeMode="contain" />
+              <Image source={require("../../assets/images/Perrito.jpg")} style={styles.dogImage} resizeMode="contain" />
             </Animated.View>
           </View>
 
